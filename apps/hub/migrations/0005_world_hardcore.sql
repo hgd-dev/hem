@@ -1,0 +1,1 @@
+ALTER TABLE worlds ADD COLUMN hardcore INTEGER NOT NULL DEFAULT 0 CHECK(hardcore IN (0,1));

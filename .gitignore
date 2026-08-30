@@ -1,0 +1,11 @@
+node_modules/
+.DS_Store
+.env
+.dev.vars
+*.log
+*.zip
+apps/client/upstream/
+apps/client/dist/
+infra/data/
+apps/hub/wrangler.production.jsonc
+artifacts/

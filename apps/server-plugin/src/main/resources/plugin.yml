@@ -1,0 +1,15 @@
+name: HEMGate
+version: 1.0.0-rc.12
+main: com.hemcraft.gate.HEMGatePlugin
+api-version: '1.21.5'
+author: HEM
+website: https://example.invalid/hem
+description: One-use HEM launch authorization for private Paper 1.21.5 worlds.
+commands:
+  hem:
+    description: HEM launch authorization
+    usage: /hem auth <launch-token> | /hem resume <resume-token>
+    permission: hem.auth
+permissions:
+  hem.auth:
+    default: true

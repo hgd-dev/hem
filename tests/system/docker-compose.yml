@@ -1,0 +1,65 @@
+services:
+  authstub:
+    image: node:22-alpine
+    working_dir: /repo
+    command: ["node","tests/system/auth-stub.mjs"]
+    environment:
+      SERVER_SERVICE_KEY: system-server-key-0123456789abcdef
+      PUBLIC_SKIN_ORIGIN: http://127.0.0.1:9090
+    volumes:
+      - ../..:/repo:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks: [hemtest]
+
+  orchestrator:
+    init: true
+    stop_grace_period: 60s
+    build:
+      context: ../..
+      dockerfile: apps/orchestrator/Dockerfile
+    environment:
+      PORT: "3000"
+      WORLD_ROOT: /data/worlds
+      PAPER_VERSION: "1.21.5"
+      PAPER_BUILD: "114"
+      PAPER_SHA256: "2ae6ae22adf417699746e0f89fc2ef6cb6ee050a5f6608cee58f0535d60b509e"
+      PAPER_JAR: /cache/paper.jar
+      ACCEPT_MINECRAFT_EULA: "TRUE"
+      WORLD_PORT_START: "31000"
+      WORLD_PORT_END: "31009"
+      MAX_ACTIVE_WORLDS: "1"
+      WORLD_XMS: "512M"
+      WORLD_XMX: "2G"
+      IDLE_STOP_MINUTES: "30"
+      WORLD_START_TIMEOUT_SECONDS: "180"
+      ORCHESTRATOR_KEY: system-orchestrator-key-0123456789abcdef
+      SERVER_SERVICE_KEY: system-server-key-0123456789abcdef
+      HEM_HUB_URL: http://authstub:9090
+      HEM_ENABLE_ADMIN_COMMANDS: "true"
+      HEM_ENABLE_TEST_FAULTS: "true"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - test-worlds:/data/worlds
+      - test-paper:/cache
+    depends_on: [authstub]
+    networks: [hemtest]
+
+  proxy:
+    build:
+      context: ../..
+      dockerfile: apps/proxy/Dockerfile
+    environment:
+      PORT: "8080"
+      MC_HOST: orchestrator
+      WORLD_PORT_START: "31000"
+      WORLD_PORT_END: "31009"
+      CLIENT_ORIGIN: http://127.0.0.1:4173
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on: [orchestrator]
+    networks: [hemtest]
+
+networks: { hemtest: {} }
+volumes: { test-worlds: {}, test-paper: {} }

@@ -1,0 +1,83 @@
+name: Deploy HEM Cloudflare
+on:
+  workflow_dispatch:
+    inputs:
+      mwc_ref:
+        description: Exact 40-character minecraft-web-client commit SHA from a green System Acceptance run
+        required: true
+        type: string
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Build HEM browser client
+        env:
+          MWC_REF: ${{ inputs.mwc_ref }}
+          HEM_REQUIRE_PINNED_MWC: 'true'
+        run: node apps/client/build-client.mjs
+      - name: Render production Cloudflare config
+        run: node scripts/render-cloudflare-config.mjs
+        env:
+          HEM_D1_DATABASE_ID: ${{ vars.HEM_D1_DATABASE_ID }}
+          HEM_CLIENT_URL: ${{ vars.HEM_CLIENT_URL }}
+          HEM_PROXY_URL: ${{ vars.HEM_PROXY_URL }}
+          HEM_ORCHESTRATOR_URL: ${{ vars.HEM_ORCHESTRATOR_URL }}
+      - name: Production preflight
+        run: npm run preflight:production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          HOUSEHOLD_CODE: ${{ secrets.HOUSEHOLD_CODE }}
+          IDENTITY_PEPPER: ${{ secrets.IDENTITY_PEPPER }}
+          SERVER_SERVICE_KEY: ${{ secrets.SERVER_SERVICE_KEY }}
+          ORCHESTRATOR_KEY: ${{ secrets.ORCHESTRATOR_KEY }}
+      - name: Deploy version-pinned HEM client
+        run: npx --yes wrangler@4.124.0 deploy --config apps/client/wrangler.jsonc
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Verify deployed HEM client identity
+        env:
+          HEM_CLIENT_URL: ${{ vars.HEM_CLIENT_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$HEM_CLIENT_URL"
+          BUILD_JSON="$(curl --fail --silent --show-error --retry 8 --retry-delay 3 "${HEM_CLIENT_URL%/}/hem-build.json")"
+          BUILD_JSON="$BUILD_JSON" node -e 'const d=JSON.parse(process.env.BUILD_JSON); if(d.minecraft!=="1.21.5") throw new Error(`deployed client is ${d.minecraft}`); if(d.hemVersion!=="1.0.0-rc.12") throw new Error(`deployed HEM client is ${d.hemVersion}`); if(!/^[0-9a-f]{40}$/.test(d.upstreamCommit||"")) throw new Error("missing pinned upstream commit identity"); if(d.upstreamPinned!==true || d.upstreamRef!==d.upstreamCommit) throw new Error("deployed client was not built from an exact pinned upstream ref"); if(!Array.isArray(d.upstreamAdvertisedVersions)||!d.upstreamAdvertisedVersions.length) throw new Error("missing upstream advertised-version attestation"); if(!/^[0-9a-f]{64}$/.test(d.upstreamSupportedVersionsSha256||"")) throw new Error("missing upstream supportedVersions source hash"); if(d.compatibilityMode!=="native-upstream-1215" || d.upstreamAdvertised1215!==true) throw new Error(`client lacks native upstream 1.21.5 support: ${d.compatibilityMode}`); console.log(`HEM client verified: ${d.hemVersion} / ${d.minecraft} / ${d.upstreamCommit} / ${d.compatibilityMode}`)'
+      - name: Apply D1 migrations
+        working-directory: apps/hub
+        run: npx --yes wrangler@4.124.0 d1 migrations apply hem --remote --config wrangler.production.jsonc
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Deploy HEM hub
+        run: npx --yes wrangler@4.124.0 deploy --config apps/hub/wrangler.production.jsonc
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Install HEM hub secrets
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          HOUSEHOLD_CODE: ${{ secrets.HOUSEHOLD_CODE }}
+          IDENTITY_PEPPER: ${{ secrets.IDENTITY_PEPPER }}
+          SERVER_SERVICE_KEY: ${{ secrets.SERVER_SERVICE_KEY }}
+          ORCHESTRATOR_KEY: ${{ secrets.ORCHESTRATOR_KEY }}
+        run: |
+          set -euo pipefail
+          put_secret() { printf '%s' "${!1}" | npx --yes wrangler@4.124.0 secret put "$1" --config apps/hub/wrangler.production.jsonc; }
+          put_secret HOUSEHOLD_CODE
+          put_secret IDENTITY_PEPPER
+          put_secret SERVER_SERVICE_KEY
+          put_secret ORCHESTRATOR_KEY
+      - name: Verify public hub health
+        env:
+          HEM_HUB_URL: ${{ vars.HEM_HUB_URL }}
+        run: |
+          test -n "$HEM_HUB_URL"
+          curl --fail --silent --show-error --retry 8 --retry-delay 3 "${HEM_HUB_URL%/}/api/health"

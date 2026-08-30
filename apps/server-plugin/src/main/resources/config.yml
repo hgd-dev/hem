@@ -1,0 +1,8 @@
+world-id: 'w_REPLACEME'
+hub-url: 'https://hem.example.com'
+service-key: 'REPLACEME'
+orchestrator-url: 'http://127.0.0.1:3000'
+orchestrator-key: 'REPLACEME'
+auth-timeout-seconds: 45
+allow-commands: true
+

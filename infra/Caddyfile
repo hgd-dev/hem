@@ -1,0 +1,9 @@
+{$PLAY_DOMAIN} {
+  encode zstd gzip
+  reverse_proxy proxy:8080
+}
+
+{$CONTROL_DOMAIN} {
+  encode zstd gzip
+  reverse_proxy orchestrator:3000
+}

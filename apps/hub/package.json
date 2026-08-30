@@ -1,0 +1,6 @@
+{
+  "name": "@hem/hub",
+  "private": true,
+  "type": "module",
+  "devDependencies": {"wrangler": "4.124.0"}
+}

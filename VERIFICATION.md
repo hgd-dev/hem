@@ -1,0 +1,73 @@
+# HEM RC12 verification record
+
+Date: 2026-08-30
+
+## Completed in the build sandbox
+
+- Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
+- `node --check` on generated Node/browser sources.
+- `npm test`: **83/83 passing** source/logic/security/release-gate tests in the current RC12 local pass.
+- `npm run verify`: **53/53 release contracts passing** across 93 source files.
+- `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
+- 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
+- HEM browser build script pins `minecraft-data` 3.114.0, `minecraft-renderer` 0.1.96, `minecraft-inventory` 0.1.47, `mcraft-fun-mineflayer` 0.1.23 and `mc-assets` 0.2.83, forces the 1.21.5 version gate, enables auto-connect, records the upstream Git commit, and refuses to bundle unless the complete 1.21.5 item/block/entity registries round-trip correctly at protocol 770 and the native 1.21.5 Spring to Life item-definition layer is present.
+- Existing world safety is version-aware: RC11 parses gzip-compressed NBT `world/level.dat` and refuses to open a world with DataVersion newer than 4325, preventing an unsafe downgrade from an RC9/RC10 1.21.11 world.
+- Paper login is gated by a 90-second one-use Cloudflare launch session in production.
+- Production raw Paper ports are not published.
+- WebSocket proxy destination is allowlisted to the orchestrator's bounded port range.
+- Native Paper saves are supplemented by a cold R2/rclone backup helper. RC11 fixes the backup checksum so it remains verifiable after download and adds a destructive-confirmation restore helper with checksum validation, archive traversal rejection, a pre-restore rollback image, native `level.dat` verification, and automatic rollback on a failed restore.
+- Multiplayer presence is timestamped per player, preventing reordered join/quit delivery from corrupting active-player counts.
+- Production Cloudflare deployment has a generated-config/secret preflight, D1 migration step, Worker-secret installation and public health check.
+- Hub static responses include a restrictive CSP and related browser security headers. Uploaded custom skins are validated, served with WebGL-compatible CORS, injected into Paper player profiles with Classic/Slim texture metadata, and shown in a dependency-free WebGL Classic/Slim 3D launcher preview with outer layers and drag rotation; legacy 64×32 skins are normalized to a complete Classic 64×64 atlas.
+- Native Java-style world creation now includes Survival / Creative / Hardcore, Peaceful–Hard difficulty, Default / Superflat / Large Biomes / Amplified world types, Generate Structures, seed and per-world Allow Commands. Hardcore is enforced as Survival + Hard by Paper.
+- Per-world **Allow Commands** is now a first-class HEM world property: it travels through D1 → orchestrator → Paper `enable-command-block`/HEMGate and grants the authenticated player operator status only for that isolated world. The client-origin command acceptance no longer depends on a hidden `op` step.
+- A full two-Chromium + Paper 1.21.5 GitHub Actions acceptance workflow is included; RC11 additionally gates reciprocal live custom-skin fetches, browser refresh through a rotated one-use resume lease, a 60-minute main/manual two-browser renderer/session soak (5 minutes on pull requests), a real proxy stop/start resume test, and forced active-Paper `SIGKILL` recovery before the existing shared/Singleplayer persistence checks. RC11 also names every required gameplay gate, expands live coverage to normal keyboard movement, jump/fall damage, hunger/death/respawn, armor/offhand, 3×3 crafting, barrel + private ender chest, repeaters, redstone dust, time/weather/difficulty, world border, native portal entry and representative entity families, and emits `hem-1215-certification.json` alongside launcher/restore certificates and screenshot evidence. The workflow runs the real backup/restore helpers through a deterministic local-rclone remote, proves a good restore, then proves automatic rollback after a deliberately invalid destructive restore.
+
+## Not executable in this sandbox
+
+This runtime does not provide Docker or Gradle, and its shell DNS cannot resolve GitHub/npm (a direct `git ls-remote` fails with `Could not resolve host: github.com`). Therefore it cannot truthfully provide the final live result for:
+
+- compiling the Paper plugin against the remote Paper API repository;
+- downloading/starting a real Paper 1.21.5 server;
+- cloning/installing/building minecraft-web-client;
+- running the two Chromium 1.21.5 system acceptance test.
+
+Those operations are encoded in CI instead of being claimed as completed.
+
+## Final-release rule
+
+Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/system-1215.yml` certification is green for 60 minutes, the production Cloudflare R2 restore has passed, and `docs/MANUAL_ACCEPTANCE.md` is signed off. `npm run promote` is the supported transition.
+
+## RC12 upstream pin hotfix
+- RC12 pins the browser client default to upstream v0.1.98 commit `cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78`, the release containing the 1.21.5 protocol support update; CI and System Acceptance now reject moving branches/tags for acceptance.
+
+## RC11 hardening
+- Upstream compatibility attestation: `hem-build.json` preserves the original upstream advertised-version list and its SHA-256 and RC11 requires the pinned upstream commit to advertise 1.21.5 natively; patched/forced compatibility is rejected.
+- Visible in-client fatal diagnostics for build identity, 1.21.5 registry, renderer-health and authorization failures; broken sessions no longer fail as a silent blank/half-connected game.
+- Orchestrator runtime/config validation, Paper pre-ready failure state, controlled retry delay, and world-config fingerprinting prevent silent crash loops or accidental reuse with changed world settings.
+- `npm run doctor` / `npm run doctor:system` emit `artifacts/hem-doctor.json`; strict System Acceptance requires Docker, the built client identity, and pinned GitHub/Paper reachability before gameplay begins.
+- Required live acceptance now includes a 1.21.5 one-block obstacle traversal and post-placement renderer-stability gate, targeting the exact movement/render regression classes that flat-ground protocol checks can miss. It also requires native minecart mount/dismount, shulker-box access, and real smoker + blast-furnace processing.
+- Dependency-free WebGL Classic/Slim 3D launcher skin preview with base/outer layers, drag rotation, dedicated Playwright acceptance, and correct legacy 64×32 → Classic 64×64 normalization.
+- Named live-gate manifest + independent certificate verifier covering launcher, gameplay, recovery, soak and upstream pinning.
+- Expanded two-browser gates for normal keyboard movement, block placement, jump/fall damage, hunger/death/respawn, armor/offhand, 3×3 crafting, barrel/ender-chest isolation, repeaters/redstone dust, time/weather/difficulty, world border, native portal entry and representative entity families.
+- Deterministic Docker+rclone-local cold-backup restore/rollback drill; this proves recovery logic while leaving real Cloudflare R2 transport as a separate final manual requirement.
+- `npm run parity` reports the machine-parsed ledger; `npm run release:guard` uses the finite `docs/RELEASE_BLOCKERS.md` promotion list rather than requiring every compatibility-roadmap row to be PASS, while still requiring pinned 60-minute certification for final 1.0.0.
+- 83/83 local tests and 53/53 release contracts.
+- Browser refresh recovery via a five-minute rotating one-use in-memory resume lease delivered over `hem:session`; the original launch token remains one-use and URL-fragment-only.
+- Post-auth skin profile re-announcement plus reciprocal two-browser custom-texture fetch assertions.
+- Test-only forced Paper crash endpoint, gated by `HEM_ENABLE_TEST_FAULTS`, with world/player persistence recovery assertions.
+- Relocatable R2 backup checksums and guarded restore/rollback helper.
+- 60-minute two-browser certification soak encoded in the main/manual system workflow.
+- Backward-safe Hardcore D1 persistence plus real SQLite migration tests.
+- Unit-tested Paper server.properties generation and owner-only Edit World / rename flow.
+- Final-certification guard: `HEM_REQUIRE_PINNED_MWC=true` rejects branch/tag refs, System Acceptance can require the exact SHA, and production Cloudflare deployment always requires an exact upstream commit ref equal to the resolved commit.
+- Client build pins and validates `mc-assets` 0.2.83's native 1.21.5 item-definition layer for Mace, Wind Charge and Spring to Life items, while keeping live rendering parity as an acceptance requirement rather than a paper claim.
+
+## RC11 parity expansion
+
+- Parity ledger: **PASS=12 / PARTIAL=134 / TODO=0 / TOTAL=146**. Zero TODO means every tracked family now has an implementation or executable acceptance path; it is not the same as full parity.
+- Mandatory live System Acceptance: **163 named gates plus the configured soak**. The certificate verifier derives the required set from `tests/system/required-gates-1215.json`.
+- `npm run parity:full` is the strict full-parity guard and remains expected to fail until all 134 PARTIAL rows have been converted to PASS by live evidence or a user-approved browser exception.
+- RC11 expands browser-facing Options with FOV, sensitivity, render distance, view bobbing, smooth lighting, sky/day-cycle, raw input, master/music volume, high contrast and reduced motion.
+- RC11 adds original synthesized HEM feedback audio and a damage vignette without redistributing Mojang assets.
+- The live suite now includes native worldgen/structure locates, seed authority, random ticks, survival mining timing, archaeology brushing/modern blocks, broad workstations plus real brewing/smithing/grindstone results, item durability/components/bundles, furnace XP, elytra/fireworks, attack cooldown/criticals, directional shields, Protection IV, Fire Aspect, Totems, potion→milk clearing, bow/wind-charge/mace paths, Spring to Life growth/variants, Java quasi-connectivity, Crafter/target/observer/tripwire/activator-rail/torch-burnout redstone behavior, paid beacon effects, villager trading, sculk vibration, minecart/boat/mount inventories, End Gateway + dragon exit-fountain state, HUD/scoreboard/team packets, dynamic world-border updates, recipe/statistics/advancement synchronization, command completion and real remote leave/rejoin events.

@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#1b2533">
+  <meta name="referrer" content="no-referrer">
+  <title>HEM — Hudson-Elise-Minecraft</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="sky" aria-hidden="true"><div class="cloud c1"></div><div class="cloud c2"></div><div class="ridge r1"></div><div class="ridge r2"></div><div class="ground"></div></div>
+  <main id="app" class="shell">
+    <section id="boot" class="screen active" aria-live="polite">
+      <div class="logo-wrap"><div class="logo">HEM</div><div class="subtitle">HUDSON · ELISE · MINECRAFT</div><div class="splash">1.21.5</div></div>
+      <div class="panel compact"><p id="bootText">Loading HEM…</p></div>
+    </section>
+
+    <section id="register" class="screen">
+      <div class="logo-wrap small"><div class="logo">HEM</div><div class="subtitle">CREATE PLAYER</div></div>
+      <div class="panel form-panel">
+        <label>Player Name<input id="regName" maxlength="32" autocomplete="nickname" placeholder="Hudson or Elise"></label>
+        <div class="skin-editor compact-skin">
+          <canvas id="regSkinPreview" width="128" height="192" aria-label="Skin preview"></canvas>
+          <div class="skin-controls">
+            <label>Skin PNG<input id="regSkin" type="file" accept="image/png"></label>
+            <button id="regSkinModel" class="mcbtn" type="button" data-action="toggle-reg-skin-model">Model: Classic</button>
+            <p class="hint">64×64 PNG recommended. Your skin is stored with your private HEM profile.</p>
+          </div>
+        </div>
+        <label>Household Access Code<input id="regCode" type="password" autocomplete="current-password" placeholder="Private HEM code"></label>
+        <button class="mcbtn primary" data-action="register">Create Player</button>
+        <button class="mcbtn" data-action="restore">Restore Device Backup</button>
+        <input id="restoreFile" type="file" accept="application/json" hidden>
+        <p class="hint">Your recovery credential stays on this device unless you export a backup.</p>
+      </div>
+    </section>
+
+    <section id="menu" class="screen">
+      <div class="logo-wrap"><div class="logo">HEM</div><div class="subtitle">HUDSON · ELISE · MINECRAFT</div><div class="splash">1.21.5</div></div>
+      <div class="stack menu-stack">
+        <button class="mcbtn primary" data-action="singleplayer">Singleplayer</button>
+        <button class="mcbtn primary" data-action="multiplayer">Multiplayer</button>
+        <button class="mcbtn" data-action="join">Join Private World</button>
+        <div class="row"><button class="mcbtn" data-action="options">Options…</button><button class="mcbtn" data-action="profile">Profile</button></div>
+      </div>
+      <div id="whoami" class="footer-chip"></div>
+    </section>
+
+    <section id="worlds" class="screen dark-screen">
+      <header class="screen-header"><h1 id="worldTitle">Select World</h1></header>
+      <div id="worldList" class="world-list"></div>
+      <div class="bottom-actions">
+        <button class="mcbtn primary" data-action="play-selected">Play Selected World</button>
+        <div class="row"><button class="mcbtn" data-action="create">Create New World</button><button class="mcbtn" data-action="edit-selected">Edit</button><button class="mcbtn" data-action="invite-selected">Invite</button></div>
+        <div class="row"><button class="mcbtn danger" data-action="archive-selected">Archive</button><button class="mcbtn" data-action="back-menu">Cancel</button></div>
+      </div>
+    </section>
+
+    <section id="create" class="screen dark-screen">
+      <header class="screen-header"><h1>Create New World</h1></header>
+      <div class="panel form-panel wide">
+        <label>World Name<input id="worldName" maxlength="64" value="New World"></label>
+        <label>Seed <span class="muted">(optional)</span><input id="worldSeed" maxlength="100" placeholder="Leave blank for random"></label>
+        <div class="choice-grid">
+          <button id="modeBtn" class="mcbtn" data-action="cycle-mode">Game Mode: Survival</button>
+          <button id="difficultyBtn" class="mcbtn" data-action="cycle-difficulty">Difficulty: Normal</button>
+        </div>
+        <div class="mode-note" id="modeNote">Search for resources, craft, gain levels, health and hunger.</div>
+        <button id="worldTypeBtn" class="mcbtn" data-action="cycle-world-type">World Type: Default</button>
+        <button id="structuresBtn" class="mcbtn" data-action="toggle-structures">Generate Structures: On</button>
+        <button id="worldKindBtn" class="mcbtn" data-action="toggle-kind">Access: Singleplayer (Private)</button>
+        <button id="commandsBtn" class="mcbtn" data-action="toggle-commands">Allow Commands: On</button>
+        <button class="mcbtn primary" data-action="confirm-create">Create New World</button>
+        <button class="mcbtn" data-action="cancel-create">Cancel</button>
+      </div>
+    </section>
+
+    <section id="edit-world" class="screen dark-screen">
+      <header class="screen-header"><h1>Edit World</h1></header>
+      <div class="panel form-panel wide">
+        <label>World Name<input id="editWorldName" maxlength="64"></label>
+        <div id="editWorldMeta" class="mode-note"></div>
+        <p class="hint">HEM keeps the world ID and native Paper save directory unchanged when you rename it.</p>
+        <button class="mcbtn primary" data-action="save-world-edit">Save World</button>
+        <button class="mcbtn" data-action="cancel-world-edit">Cancel</button>
+      </div>
+    </section>
+
+    <section id="join" class="screen dark-screen">
+      <header class="screen-header"><h1>Join Private World</h1></header>
+      <div class="panel form-panel">
+        <label>Invite Code<input id="inviteCode" autocomplete="off" spellcheck="false" placeholder="Paste invite code"></label>
+        <button class="mcbtn primary" data-action="redeem">Join World</button>
+        <button class="mcbtn" data-action="back-menu">Cancel</button>
+        <p class="hint">After joining once, the world remains in your Multiplayer list.</p>
+      </div>
+    </section>
+
+    <section id="options" class="screen dark-screen">
+      <header class="screen-header"><h1>Options</h1></header>
+      <div class="panel form-panel">
+        <label>Menu UI Scale<select id="uiScale"><option value="0.9">Small</option><option value="1" selected>Normal</option><option value="1.15">Large</option></select></label>
+        <label>Game Render Distance<select id="renderDistance"><option value="4">4 chunks</option><option value="6">6 chunks</option><option value="8" selected>8 chunks</option><option value="10">10 chunks</option><option value="12">12 chunks</option><option value="16">16 chunks</option></select></label>
+        <label>Field of View<input id="fov" type="range" min="30" max="110" step="1" value="70"><span id="fovValue">70</span></label>
+        <label>Mouse Sensitivity<input id="mouseSensitivity" type="range" min="0.1" max="2" step="0.05" value="1"><span id="mouseSensitivityValue">1.00</span></label>
+        <label>Master Volume<input id="masterVolume" type="range" min="0" max="1" step="0.05" value="1"><span id="masterVolumeValue">100%</span></label>
+        <label>Music Volume<input id="musicVolume" type="range" min="0" max="1" step="0.05" value="0.5"><span id="musicVolumeValue">50%</span></label>
+        <label class="check"><input id="viewBobbing" type="checkbox" checked> View bobbing</label>
+        <label class="check"><input id="smoothLighting" type="checkbox" checked> Smooth lighting</label>
+        <label class="check"><input id="skyEnabled" type="checkbox" checked> Sky / day cycle</label>
+        <label class="check"><input id="rawMouseInput" type="checkbox" checked> Raw mouse input</label>
+        <label class="check"><input id="highContrast" type="checkbox"> High contrast launcher UI</label>
+        <label class="check"><input id="openControls" type="checkbox"> Open Controls on next game launch</label>
+        <label class="check"><input id="reducedMotion" type="checkbox"> Reduce menu and damage-overlay motion</label>
+        <p class="hint">HEM forwards supported video, input and audio settings into the browser client at launch. Controls can also be remapped in-client.</p>
+        <button class="mcbtn primary" data-action="save-options">Done</button>
+      </div>
+    </section>
+
+    <section id="profile" class="screen dark-screen">
+      <header class="screen-header"><h1>Player Profile</h1></header>
+      <div class="panel form-panel">
+        <div id="profileInfo" class="profile-info"></div>
+        <label>Display Name<input id="profileName" maxlength="32"></label>
+        <div class="skin-editor">
+          <canvas id="profileSkinPreview" width="160" height="240" aria-label="Skin preview"></canvas>
+          <div class="skin-controls">
+            <label>Custom Skin PNG<input id="profileSkin" type="file" accept="image/png"></label>
+            <button id="profileSkinModel" class="mcbtn" type="button" data-action="toggle-profile-skin-model">Model: Classic</button>
+            <button class="mcbtn primary" data-action="save-profile">Save Profile</button>
+            <button class="mcbtn" data-action="clear-skin">Reset Skin</button>
+          </div>
+        </div>
+        <button class="mcbtn primary" data-action="backup">Export Device Backup</button>
+        <button class="mcbtn" data-action="back-menu">Done</button>
+        <button class="mcbtn danger" data-action="forget-device">Forget This Device</button>
+      </div>
+    </section>
+
+    <section id="loading" class="screen dark-screen">
+      <div class="loading-center">
+        <h1>Loading world</h1>
+        <div class="square-loader"><span></span></div>
+        <p id="loadStatus">Preparing Paper 1.21.5…</p>
+        <button class="mcbtn small-btn" data-action="cancel-launch">Cancel</button>
+      </div>
+    </section>
+  </main>
+  <div class="legal-note">HEM is an unofficial private fan project and is not affiliated with Mojang Studios or Microsoft.</div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

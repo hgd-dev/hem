@@ -1,0 +1,31 @@
+{
+  "name": "hem",
+  "version": "1.0.0-rc.12",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "verify": "node scripts/verify.mjs",
+    "package": "node scripts/package.mjs",
+    "preflight": "node scripts/preflight.mjs",
+    "preflight:production": "node scripts/preflight.mjs --production",
+    "verify:certification": "node scripts/verify-certification.mjs",
+    "parity": "node scripts/parity-report.mjs",
+    "release:guard": "node scripts/release-guard.mjs",
+    "release:readiness": "node scripts/release-readiness.mjs",
+    "set-version": "node scripts/set-version.mjs",
+    "promote": "node scripts/promote-1.0.0.mjs",
+    "release:reconcile": "node scripts/reconcile-release-blockers.mjs",
+    "verify:r2-production": "node scripts/verify-production-r2-evidence.mjs",
+    "verify:manual": "node scripts/verify-manual-acceptance.mjs",
+    "drill:r2-production": "infra/production-r2-drill.sh",
+    "manifest:write": "node scripts/source-manifest.mjs --write",
+    "manifest:verify": "node scripts/source-manifest.mjs",
+    "parity:full": "node scripts/parity-report.mjs --final",
+    "doctor": "node scripts/doctor.mjs",
+    "doctor:system": "node scripts/doctor.mjs --system"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

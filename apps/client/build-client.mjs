@@ -1,0 +1,192 @@
+import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import fs from 'node:fs'
+import fsp from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const here = path.dirname(fileURLToPath(import.meta.url))
+const upstream = path.join(here, 'upstream')
+const dist = path.join(here, 'dist')
+const repo = process.env.MWC_REPO || 'https://github.com/zardoy/minecraft-web-client.git'
+const ref = process.env.MWC_REF || 'cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78'
+const requirePinnedRef = process.env.HEM_REQUIRE_PINNED_MWC === 'true'
+const exactCommitRef = /^[0-9a-f]{40}$/i.test(ref)
+if (requirePinnedRef && !exactCommitRef) {
+  throw new Error('HEM final certification requires MWC_REF to be an exact 40-character upstream commit SHA')
+}
+const run = (cmd, args, cwd = here) => {
+  console.log('+', cmd, ...args)
+  execFileSync(cmd, args, { cwd, stdio: 'inherit', env: process.env })
+}
+
+await fsp.rm(upstream, { recursive: true, force: true })
+await fsp.rm(dist, { recursive: true, force: true })
+run('git', ['clone', '--filter=blob:none', '--no-checkout', repo, upstream])
+run('git', ['fetch', '--depth', '1', 'origin', ref], upstream)
+run('git', ['checkout', '--detach', 'FETCH_HEAD'], upstream)
+const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: upstream, encoding: 'utf8' }).trim()
+if (exactCommitRef && sha.toLowerCase() !== ref.toLowerCase()) {
+  throw new Error(`HEM upstream checkout mismatch: requested ${ref}, resolved ${sha}`)
+}
+
+// The web client is an upstream dependency, so HEM makes the user-facing feature
+// surface it relies on explicit. These are source-contract signals rather than a
+// substitute for live browser acceptance: if upstream removes/renames one, the
+// build stops and the integration must be reviewed instead of silently regressing.
+async function collectText(dir) {
+  const chunks = []
+  for (const entry of await fsp.readdir(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist') continue
+    const target = path.join(dir, entry.name)
+    if (entry.isDirectory()) chunks.push(await collectText(target))
+    else if (/\.(?:[cm]?[jt]sx?|json|md|html|css)$/i.test(entry.name)) chunks.push(await fsp.readFile(target, 'utf8').catch(() => ''))
+  }
+  return chunks.join('\n')
+}
+const upstreamCorpus = [
+  await collectText(path.join(upstream, 'src')),
+  await fsp.readFile(path.join(upstream, 'README.MD'), 'utf8').catch(() => ''),
+  await fsp.readFile(path.join(upstream, 'README.md'), 'utf8').catch(() => ''),
+].join('\n')
+const capabilityPatterns = {
+  keybindings: /keybind/i,
+  renderDistanceSetting: /renderDistance/,
+  rawMouseInput: /raw.?input|pointer.?lock/i,
+  resourcePackTextures: /resource.?pack/i,
+  creativeInventory: /\bJEI\b|creative.?inventory/i,
+  debugOverlay: /debug.?overlay|\bF3\b/i,
+  thirdPerson: /third.?person|perspective|\bF5\b/i,
+  sounds: /\bsounds?\b/i,
+}
+const capabilities = Object.fromEntries(Object.entries(capabilityPatterns).map(([name, pattern]) => [name, pattern.test(upstreamCorpus)]))
+const missingCapabilities = Object.entries(capabilities).filter(([, present]) => !present).map(([name]) => name)
+if (missingCapabilities.length) throw new Error(`HEM upstream capability contract missing: ${missingCapabilities.join(', ')}`)
+
+const pkgPath = path.join(upstream, 'package.json')
+const pkg = JSON.parse(await fsp.readFile(pkgPath, 'utf8'))
+pkg.pnpm ??= {}
+pkg.pnpm.overrides ??= {}
+pkg.pnpm.overrides['minecraft-data'] = '3.114.0'
+pkg.pnpm.overrides['minecraft-renderer'] = '0.1.96'
+pkg.pnpm.overrides['minecraft-inventory'] = '0.1.47'
+pkg.pnpm.overrides['mcraft-fun-mineflayer'] = '0.1.23'
+pkg.pnpm.overrides['mc-assets'] = '0.2.83'
+await fsp.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
+
+// HEM intentionally exposes one protocol target. Preserve what the exact upstream
+// commit advertised *before* patching it so HEM can never confuse a forced protocol
+// target with upstream-native 1.21.5 support. Live acceptance is what promotes this
+// native integration from candidate to certified compatibility.
+const supportedVersions = path.join(upstream, 'src', 'supportedVersions.mjs')
+if (!fs.existsSync(supportedVersions)) throw new Error('Upstream supportedVersions.mjs moved; review HEM client patch before release')
+const upstreamSupportedVersionsSource = await fsp.readFile(supportedVersions, 'utf8')
+const upstreamAdvertisedVersions = [...new Set([...upstreamSupportedVersionsSource.matchAll(/[\"'](\d+\.\d+(?:\.\d+)?)[\"']/g)].map(match => match[1]))]
+if (!upstreamAdvertisedVersions.length) throw new Error('Could not parse upstream advertised Minecraft versions; review HEM client patch before release')
+const upstreamAdvertised1215 = upstreamAdvertisedVersions.includes('1.21.5')
+const upstreamSupportedVersionsSha256 = createHash('sha256').update(upstreamSupportedVersionsSource).digest('hex')
+if (!upstreamAdvertised1215) {
+  throw new Error(`HEM 1.21.5 requires native upstream support; pinned upstream advertises ${upstreamAdvertisedVersions.join(', ')}`)
+}
+const compatibilityMode = 'native-upstream-1215'
+console.log(`HEM client compatibility mode: ${compatibilityMode}; upstream advertised ${upstreamAdvertisedVersions.join(', ')}`)
+// Narrow the launcher to HEM's single certified target without manufacturing support
+// for a version upstream did not already advertise.
+await fsp.writeFile(supportedVersions, "export default ['1.21.5']\n")
+
+const pnpm = args => run('npx', ['--yes', 'pnpm@10.32.1', ...args], upstream)
+pnpm(['install', '--no-frozen-lockfile'])
+
+// Fail the build before bundling if the installed protocol/data stack is not truly
+// 1.21.5-aware. This does not prove renderer parity, but it prevents an older
+// registry silently masquerading as HEM 1.21.5.
+const dataCheck = path.join(upstream, '.hem-verify-1215.cjs')
+await fsp.writeFile(dataCheck, String.raw`
+const mcData = require('minecraft-data')('1.21.5')
+if (!mcData) throw new Error('minecraft-data cannot load 1.21.5')
+const need = (map, names, label) => {
+  const missing = names.filter(name => !map?.[name])
+  if (missing.length) throw new Error('HEM 1.21.5 ' + label + ' registry missing: ' + missing.join(', '))
+}
+const roundTrip = (array, byName, byId, label) => {
+  if (!Array.isArray(array) || array.length === 0) throw new Error('HEM 1.21.5 ' + label + ' array is empty')
+  for (const entry of array) {
+    if (!entry || typeof entry.name !== 'string' || !Number.isInteger(entry.id)) throw new Error('HEM 1.21.5 malformed ' + label + ' registry entry')
+    if (byName?.[entry.name]?.id !== entry.id) throw new Error('HEM 1.21.5 ' + label + ' name mapping mismatch: ' + entry.name)
+    if (byId?.[entry.id]?.name !== entry.name) throw new Error('HEM 1.21.5 ' + label + ' id mapping mismatch: ' + entry.id)
+  }
+}
+need(mcData.itemsByName, ['mace','wind_charge','brown_egg','blue_egg','firefly_bush','leaf_litter','wildflowers','bush','short_dry_grass','tall_dry_grass','cactus_flower'], 'item')
+need(mcData.blocksByName, ['crafter','trial_spawner','vault','copper_bulb','firefly_bush','leaf_litter','wildflowers','bush','short_dry_grass','tall_dry_grass','cactus_flower'], 'block')
+need(mcData.entitiesByName, ['pig','cow','chicken','sheep','wolf'], 'entity')
+roundTrip(mcData.itemsArray, mcData.itemsByName, mcData.items, 'item')
+roundTrip(mcData.blocksArray, mcData.blocksByName, mcData.blocks, 'block')
+roundTrip(mcData.entitiesArray, mcData.entitiesByName, mcData.entities, 'entity')
+if (mcData.version?.minecraftVersion !== '1.21.5') throw new Error('HEM data resolved to ' + mcData.version?.minecraftVersion)
+if (mcData.version?.version !== 770) throw new Error('HEM 1.21.5 protocol id resolved to ' + mcData.version?.version + ', expected 770')
+if (mcData.version?.dataVersion != null && mcData.version.dataVersion !== 4325) throw new Error('HEM 1.21.5 data version resolved to ' + mcData.version.dataVersion + ', expected 4325')
+
+const assetsPackage = require('mc-assets/package.json')
+if (assetsPackage.version !== '0.2.83') throw new Error('HEM mc-assets resolved to ' + assetsPackage.version + ', expected 0.2.83')
+const itemDefinitions = require('mc-assets/dist/itemDefinitions.json')
+if (!Object.prototype.hasOwnProperty.call(itemDefinitions, '1.21.5')) throw new Error('HEM mc-assets does not advertise a 1.21.5 item-definition layer')
+for (const name of ['mace','wind_charge','brown_egg','blue_egg','firefly_bush','leaf_litter','wildflowers','bush','short_dry_grass','tall_dry_grass','cactus_flower']) {
+  if (!itemDefinitions.latest?.[name]) throw new Error('HEM mc-assets missing 1.21.5-era item definition: ' + name)
+}
+const spawnEggs = mcData.itemsArray.filter(entry => entry.name.endsWith('_spawn_egg')).map(entry => entry.name)
+if (spawnEggs.length < 50) throw new Error('HEM 1.21.5 spawn-egg registry unexpectedly small: ' + spawnEggs.length)
+for (const name of spawnEggs) {
+  if (!itemDefinitions.latest?.[name]) throw new Error('HEM mc-assets missing native 1.21.5 spawn-egg item definition: ' + name)
+}
+console.log('HEM 1.21.5 data + item-definition check passed', mcData.version.minecraftVersion, 'protocol', mcData.version.version, 'mc-assets', assetsPackage.version)
+`)
+run('node', [dataCheck], upstream)
+await fsp.rm(dataCheck, { force: true })
+
+pnpm(['prepare-project'])
+pnpm(['build'])
+
+const built = path.join(upstream, 'dist')
+if (!fs.existsSync(path.join(built, 'index.html'))) throw new Error('minecraft-web-client build did not create dist/index.html')
+await fsp.cp(built, dist, { recursive: true })
+await fsp.copyFile(path.join(here, 'hem-bridge.js'), path.join(dist, 'hem-bridge.js'))
+
+let html = await fsp.readFile(path.join(dist, 'index.html'), 'utf8')
+html = html.replace(/<title>[\s\S]*?<\/title>/i, '<title>HEM — Minecraft 1.21.5</title>')
+if (!html.includes('hem-bridge.js')) html = html.replace(/<\/body>/i, '<script src="./hem-bridge.js"></script></body>')
+await fsp.writeFile(path.join(dist, 'index.html'), html)
+
+// autoConnect=true is ignored by upstream unless this config flag is enabled.
+const configPath = path.join(dist, 'config.json')
+let config = {}
+try { config = JSON.parse(await fsp.readFile(configPath, 'utf8')) } catch {}
+config.allowAutoConnect = true
+config.promoteServers = []
+config.pauseLinks = []
+config.rightSideText = 'HEM — Hudson · Elise · Minecraft'
+config.splashText = '1.21.5'
+config.splashTextFallback = 'HEM 1.21.5'
+config.defaultUsername = 'HEMPlayer'
+delete config.defaultProxy
+await fsp.writeFile(configPath, JSON.stringify(config, null, 2) + '\n')
+
+await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
+  hemVersion: '1.0.0-rc.12',
+  minecraft: '1.21.5',
+  upstreamRepo: repo,
+  upstreamRef: ref,
+  upstreamCommit: sha,
+  upstreamPinned: exactCommitRef && sha.toLowerCase() === ref.toLowerCase(),
+  upstreamAdvertisedVersions,
+  upstreamAdvertised1215,
+  upstreamSupportedVersionsSha256,
+  compatibilityMode,
+  minecraftData: '3.114.0',
+  minecraftRenderer: '0.1.96',
+  minecraftInventory: '0.1.47',
+  mineflayerConnector: '0.1.23',
+  mcAssets: '0.2.83',
+  capabilities,
+  builtAt: new Date().toISOString(),
+}, null, 2) + '\n')
+console.log(`HEM client built from ${sha}`)

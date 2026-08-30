@@ -1,0 +1,8 @@
+{
+  "$schema":"node_modules/wrangler/config-schema.json",
+  "name":"hem-client",
+  "main":"worker.mjs",
+  "compatibility_date":"2026-08-20",
+  "workers_dev":true,
+  "assets":{"directory":"./dist","binding":"ASSETS"}
+}

@@ -1,0 +1,6 @@
+
+body.high-contrast .panel, body.high-contrast .mcbtn, body.high-contrast input, body.high-contrast select {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+body.high-contrast .hint, body.high-contrast .mode-note { opacity: 1; }

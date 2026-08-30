@@ -1,0 +1,1 @@
+export default { async fetch(request,env){ const r=await env.ASSETS.fetch(request); const h=new Headers(r.headers); h.set('X-Content-Type-Options','nosniff');h.set('Referrer-Policy','no-referrer');h.set('Permissions-Policy','camera=(), microphone=(), geolocation=()');return new Response(r.body,{status:r.status,statusText:r.statusText,headers:h}) } }

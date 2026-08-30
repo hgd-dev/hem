@@ -1,0 +1,91 @@
+name: HEM 1.21.5 System Acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      mwc_ref:
+        description: Exact 40-character minecraft-web-client commit SHA (defaults to HEM's known-good native 1.21.5 v0.1.98 commit)
+        required: false
+        default: cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78
+        type: string
+  push:
+    branches: [main]
+    paths:
+      - 'apps/client/**'
+      - 'apps/orchestrator/**'
+      - 'apps/proxy/**'
+      - 'apps/server-plugin/**'
+      - 'tests/system/**'
+      - '.github/workflows/system-1215.yml'
+  pull_request:
+    paths:
+      - 'apps/client/**'
+      - 'apps/orchestrator/**'
+      - 'apps/proxy/**'
+      - 'apps/server-plugin/**'
+      - 'tests/system/**'
+      - '.github/workflows/system-1215.yml'
+jobs:
+  two-browser-paper-1215:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Build HEM browser client against 1.21.5 data/protocol
+        env:
+          MWC_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.mwc_ref || 'cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78' }}
+          HEM_REQUIRE_PINNED_MWC: 'true'
+        run: node apps/client/build-client.mjs
+      - name: Verify live-acceptance prerequisites and built client identity
+        run: npm run doctor:system
+      - name: Install browser acceptance driver
+        run: |
+          npm install --no-save playwright@1.62.1
+          npx playwright install --with-deps chromium
+      - name: Start Paper 1.21.5 system stack
+        run: docker compose -f tests/system/docker-compose.yml up -d --build
+      - name: Start HEM client test origin
+        run: node tests/system/static-client.mjs > /tmp/hem-client.log 2>&1 & echo $! > /tmp/hem-client.pid
+      - name: Start HEM launcher test origin
+        run: node tests/system/static-hub.mjs > /tmp/hem-hub.log 2>&1 & echo $! > /tmp/hem-hub.pid
+      - name: Verify interactive Classic/Slim 3D launcher skin preview
+        run: node tests/system/launcher-3d.mjs
+      - name: Wait for control and proxy
+        run: |
+          for i in $(seq 1 90); do curl -fsS http://127.0.0.1:3000/healthz && curl -fsS http://127.0.0.1:8080/healthz && exit 0; sleep 2; done
+          docker compose -f tests/system/docker-compose.yml logs
+          exit 1
+      - name: Run two-browser 1.21.5 acceptance
+        env:
+          HEM_SOAK_MINUTES: ${{ github.event_name == 'pull_request' && '5' || '60' }}
+        run: node tests/system/browser-1215.mjs
+      - name: Install deterministic restore-drill transport
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rclone
+      - name: Prove backup restore and automatic rollback
+        run: tests/system/backup-restore-drill.sh
+      - name: Verify machine-readable acceptance certificate
+        env:
+          HEM_EXPECT_SOAK_MINUTES: ${{ github.event_name == 'pull_request' && '5' || '60' }}
+          HEM_REQUIRE_PINNED_CERT: 'true'
+        run: npm run verify:certification
+      - name: Reconcile release evidence
+        run: npm run release:reconcile
+      - name: Upload rendered acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hem-1215-acceptance-evidence
+          path: |
+            artifacts/
+            /tmp/hem-client.log
+            /tmp/hem-hub.log
+          if-no-files-found: warn
+      - name: Dump Paper/proxy logs on failure
+        if: failure()
+        run: docker compose -f tests/system/docker-compose.yml logs --no-color
+      - name: Stop acceptance stack
+        if: always()
+        run: docker compose -f tests/system/docker-compose.yml down -v
