@@ -83,7 +83,7 @@ Singleplayer is a one-member private Paper world, not an offline browser-only si
 
 ## 5. Release gate
 
-Run **HEM 1.21.5 System Acceptance** in GitHub Actions. It defaults to the exact known-good upstream v0.1.98 commit `cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78` and rejects moving branch/tag refs. To test another upstream revision, provide another exact 40-character SHA. It should upload rendered browser evidence plus `hem-1215-certification.json` and end with:
+Run **HEM 1.21.5 System Acceptance** in GitHub Actions. It defaults to the exact known-good upstream v0.1.98 commit with 1.21.5 protocol-release provenance `cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78` and rejects moving branch/tag refs. To test another upstream revision, provide another exact 40-character SHA. It should upload rendered browser evidence plus `hem-1215-certification.json` and end with:
 
 ```text
 HEM 1.21.5 SYSTEM ACCEPTANCE PASSED

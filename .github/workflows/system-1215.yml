@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       mwc_ref:
-        description: Exact 40-character minecraft-web-client commit SHA (defaults to HEM's known-good native 1.21.5 v0.1.98 commit)
+        description: Exact 40-character minecraft-web-client commit SHA (defaults to HEM's pinned v0.1.98 commit carrying the 1.21.5 protocol update)
         required: false
         default: cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78
         type: string

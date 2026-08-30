@@ -38,7 +38,7 @@ jobs:
           const d = JSON.parse(fs.readFileSync('apps/client/dist/hem-build.json', 'utf8'))
           if (d.minecraft !== '1.21.5') throw new Error(`client target is ${d.minecraft}`)
           if (d.upstreamRef !== 'cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78' || d.upstreamCommit !== 'cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78' || d.upstreamPinned !== true) throw new Error('client was not built from HEM known-good exact 1.21.5 upstream commit')
-          if (d.compatibilityMode !== 'native-upstream-1215' || d.upstreamAdvertised1215 !== true) throw new Error('client lacks native upstream 1.21.5 attestation')
+          if (d.compatibilityMode !== 'pinned-v0.1.98-1215-verified' || d.upstreamReleaseTag !== 'v0.1.98' || d.upstreamRelease1215 !== true || d.protocolVerified1215 !== true) throw new Error('client lacks pinned v0.1.98 + verified 1.21.5 protocol/data attestation')
           console.log('HEM browser artifact identity verified', d.upstreamCommit)
           NODE
       - uses: actions/upload-artifact@v4

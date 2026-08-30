@@ -1,4 +1,4 @@
-# HEM RC12 verification record
+# HEM RC13 verification record
 
 Date: 2026-08-30
 
@@ -6,7 +6,7 @@ Date: 2026-08-30
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **83/83 passing** source/logic/security/release-gate tests in the current RC12 local pass.
+- `npm test`: **83/83 passing** source/logic/security/release-gate tests in the current RC13 local pass.
 - `npm run verify`: **53/53 release contracts passing** across 93 source files.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
@@ -38,11 +38,11 @@ Those operations are encoded in CI instead of being claimed as completed.
 
 Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/system-1215.yml` certification is green for 60 minutes, the production Cloudflare R2 restore has passed, and `docs/MANUAL_ACCEPTANCE.md` is signed off. `npm run promote` is the supported transition.
 
-## RC12 upstream pin hotfix
-- RC12 pins the browser client default to upstream v0.1.98 commit `cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78`, the release containing the 1.21.5 protocol support update; CI and System Acceptance now reject moving branches/tags for acceptance.
+## RC13 upstream pin hotfix
+- RC13 pins the browser client default to upstream v0.1.98 commit `cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78`, the release containing the 1.21.5 protocol support update; CI and System Acceptance now reject moving branches/tags for acceptance.
 
 ## RC11 hardening
-- Upstream compatibility attestation: `hem-build.json` preserves the original upstream advertised-version list and its SHA-256 and RC11 requires the pinned upstream commit to advertise 1.21.5 natively; patched/forced compatibility is rejected.
+- Upstream compatibility attestation: `hem-build.json` preserves the pristine historical `supportedVersions.mjs` SHA-256 and literal version tokens for provenance, records the v0.1.98 release identity, and only certifies after the installed HEM protocol/data stack resolves Minecraft 1.21.5 / protocol 770 / DataVersion 4325 with the required registries. Historical literal tokens are not misused as a complete support list.
 - Visible in-client fatal diagnostics for build identity, 1.21.5 registry, renderer-health and authorization failures; broken sessions no longer fail as a silent blank/half-connected game.
 - Orchestrator runtime/config validation, Paper pre-ready failure state, controlled retry delay, and world-config fingerprinting prevent silent crash loops or accidental reuse with changed world settings.
 - `npm run doctor` / `npm run doctor:system` emit `artifacts/hem-doctor.json`; strict System Acceptance requires Docker, the built client identity, and pinned GitHub/Paper reachability before gameplay begins.

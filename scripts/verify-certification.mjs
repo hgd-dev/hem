@@ -34,12 +34,10 @@ if (!/^[0-9a-f]{40}$/i.test(cert.upstreamCommit || '')) throw new Error('Certifi
 if (requirePinned && (cert.upstreamPinned !== true || cert.upstreamRef !== cert.upstreamCommit)) {
   throw new Error('Final certification is not pinned to the exact resolved upstream commit')
 }
-if (!Array.isArray(cert.upstreamAdvertisedVersions) || !cert.upstreamAdvertisedVersions.length || cert.upstreamAdvertisedVersions.some(version => typeof version !== 'string')) {
-  throw new Error('Certification is missing the preserved upstream advertised-version list')
-}
+if (cert.upstreamReleaseTag !== 'v0.1.98' || cert.upstreamRelease1215 !== true) throw new Error('Certification is not tied to the known minecraft-web-client v0.1.98 1.21.5 release')
+if (!Array.isArray(cert.upstreamLiteralVersionTokens) || cert.upstreamLiteralVersionTokens.some(version => typeof version !== 'string')) throw new Error('Certification upstream literal-version provenance is malformed')
 if (!/^[0-9a-f]{64}$/i.test(cert.upstreamSupportedVersionsSha256 || '')) throw new Error('Certification is missing the upstream supportedVersions source hash')
-if (cert.compatibilityMode !== 'native-upstream-1215' || cert.upstreamAdvertised1215 !== true) throw new Error(`Certification requires native upstream 1.21.5 support; mode=${cert.compatibilityMode}`)
-if ((cert.upstreamAdvertised1215 === true) !== cert.upstreamAdvertisedVersions.includes('1.21.5')) throw new Error('Certification upstream advertised-version fields disagree')
+if (cert.compatibilityMode !== 'pinned-v0.1.98-1215-verified' || cert.protocolVerified1215 !== true) throw new Error(`Certification requires pinned v0.1.98 plus verified 1.21.5 protocol/data; mode=${cert.compatibilityMode}`)
 if (!Array.isArray(cert.gates) || cert.gates.some(id => typeof id !== 'string')) throw new Error('Certification gates are malformed')
 if (new Set(cert.gates).size !== cert.gates.length) throw new Error('Certification contains duplicate gate IDs')
 

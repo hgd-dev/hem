@@ -9,10 +9,10 @@
   // Expose a tiny read-only diagnostics surface for HEM's automated acceptance
   // runner. It deliberately contains no launch/resume secrets or profile credentials.
   const parity = {
-    hemVersion: '1.0.0-rc.12',
+    hemVersion: '1.0.0-rc.13',
     target: '1.21.5',
     connected: false,
-    build: { checked: false, ok: false, compatibilityMode: '', upstreamAdvertised1215: null, upstreamCommit: '' },
+    build: { checked: false, ok: false, compatibilityMode: '', upstreamRelease1215: null, protocolVerified1215: null, upstreamCommit: '' },
     authorization: { mode: '', attempted: false, authenticated: false, failed: false },
     registry: { checked: false, ok: false, missing: [] },
     windowsOpened: 0,
@@ -56,9 +56,10 @@
     const build = await response.json()
     parity.build.checked = true
     parity.build.compatibilityMode = String(build.compatibilityMode || '')
-    parity.build.upstreamAdvertised1215 = build.upstreamAdvertised1215 === true
+    parity.build.upstreamRelease1215 = build.upstreamRelease1215 === true
+    parity.build.protocolVerified1215 = build.protocolVerified1215 === true
     parity.build.upstreamCommit = /^[0-9a-f]{40}$/i.test(build.upstreamCommit || '') ? build.upstreamCommit : ''
-    parity.build.ok = build.minecraft === '1.21.5' && build.hemVersion === parity.hemVersion && build.compatibilityMode === 'native-upstream-1215' && build.upstreamAdvertised1215 === true
+    parity.build.ok = build.minecraft === '1.21.5' && build.hemVersion === parity.hemVersion && build.compatibilityMode === 'pinned-v0.1.98-1215-verified' && build.upstreamReleaseTag === 'v0.1.98' && build.upstreamRelease1215 === true && build.protocolVerified1215 === true
     if (!parity.build.ok) showFatal('build-identity', 'The browser bundle identity does not match this HEM 1.21.5 release. Return to the HEM launcher and redeploy the matching client build.')
   }).catch(error => {
     parity.build.checked = true

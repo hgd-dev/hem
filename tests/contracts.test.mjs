@@ -623,7 +623,7 @@ test('all four final blockers are evidence-derived and cannot be closed by statu
   assert.match(manual,/worksheetSha256/)
 })
 
-test('RC12 has no unimplemented parity TODOs but still refuses the full-parity claim until PARTIAL entries are live-proven',()=>{
+test('RC13 has no unimplemented parity TODOs but still refuses the full-parity claim until PARTIAL entries are live-proven',()=>{
   const parity=read('docs/PARITY_1_21_5.md')
   const pkg=JSON.parse(read('package.json'))
   const spec=JSON.parse(read('tests/system/required-gates-1215.json'))
@@ -635,17 +635,17 @@ test('RC12 has no unimplemented parity TODOs but still refuses the full-parity c
   for(const gate of spec.required) assert.ok(system.includes(`pass('${gate}'`)||system.includes(`pass(\"${gate}\"`),`required gate has no system pass site: ${gate}`)
 })
 
-test('client build preserves upstream version advertisement before forcing the 1.21.5 target',()=>{
+test('client build preserves upstream provenance and verifies 1.21.5 protocol/data before bundling',()=>{
   const b=read('apps/client/build-client.mjs')
   const system=read('tests/system/browser-1215.mjs')
   const verifier=read('scripts/verify-certification.mjs')
-  assert.match(b,/upstreamAdvertisedVersions/)
+  assert.match(b,/upstreamReleaseTag/); assert.match(b,/protocolVerified1215/); assert.match(b,/upstreamLiteralVersionTokens/)
   assert.match(b,/upstreamSupportedVersionsSha256/)
-  assert.match(b,/native-upstream-1215/)
-  assert.match(b,/requires native upstream support/)
+  assert.match(b,/pinned-v0\.1\.98-1215-verified/)
+  assert.match(b,/literal supportedVersions tokens are informational only/)
   assert.match(b,/createHash\('sha256'\)\.update\(upstreamSupportedVersionsSource\)/)
   assert.match(system,/compatibilityMode: buildIdentity\.compatibilityMode/)
-  assert.match(verifier,/Certification requires native upstream 1\.21\.5 support/)
+  assert.match(verifier,/pinned v0\.1\.98 plus verified 1\.21\.5 protocol\/data/)
   const workflow=read('.github/workflows/system-1215.yml')
   assert.match(b,/cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78/)
   assert.match(workflow,/default: cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78/)
@@ -686,7 +686,7 @@ test('system workflow runs the machine-readable HEM doctor before live acceptanc
   assert.match(doctor,/client\.identity/)
   assert.match(doctor,/tool\.docker-compose/)
 })
-test('RC12 native 1.21.5 mechanics are release-gated beyond registry sentinels',()=>{
+test('RC13 native 1.21.5 mechanics are release-gated beyond registry sentinels',()=>{
   const s=read('tests/system/browser-1215.mjs')
   const spec=JSON.parse(read('tests/system/required-gates-1215.json'))
   const client=read('apps/client/build-client.mjs')
@@ -712,7 +712,7 @@ test('RC12 native 1.21.5 mechanics are release-gated beyond registry sentinels',
 })
 
 
-test('RC12 parity closure batch gates seed vertical movement storage redstone taming shield and respawn-anchor behavior',()=>{
+test('RC13 parity closure batch gates seed vertical movement storage redstone taming shield and respawn-anchor behavior',()=>{
   const s=read('tests/system/browser-1215.mjs')
   const spec=JSON.parse(read('tests/system/required-gates-1215.json'))
   const gates=[
@@ -734,7 +734,7 @@ test('RC12 parity closure batch gates seed vertical movement storage redstone ta
 })
 
 
-test('RC12 second parity closure batch gates native recipes technical redstone gateway and death drops',()=>{
+test('RC13 second parity closure batch gates native recipes technical redstone gateway and death drops',()=>{
   const s=read('tests/system/browser-1215.mjs')
   const spec=JSON.parse(read('tests/system/required-gates-1215.json'))
   const gates=['items.brewing-recipe','items.smithing-recipe','items.grindstone-action','redstone.tripwire-action','commands.command-minecart','survival.death-drops','dimensions.end-gateway']
@@ -747,7 +747,7 @@ test('RC12 second parity closure batch gates native recipes technical redstone g
 })
 
 
-test('RC12 third parity closure gates XP costs border damage and powder snow physics',()=>{
+test('RC13 third parity closure gates XP costs border damage and powder snow physics',()=>{
   const s=read('tests/system/browser-1215.mjs')
   const spec=JSON.parse(read('tests/system/required-gates-1215.json'))
   const gates=['progression.enchant-cost','items.anvil-cost','world.border-damage','movement.powder-snow']
@@ -759,7 +759,7 @@ test('RC12 third parity closure gates XP costs border damage and powder snow phy
   for(const marker of ['enchanting consumes browser XP levels','anvil rename consumes browser XP levels','world-border damage reaches browser health state','powder-snow sink/support semantics differ with leather boots']) assert.ok(s.includes(marker),`missing third-closure live marker ${marker}`)
 })
 
-test('RC12 fourth parity closure gates bundle repair furnace XP archaeology cooldown and critical combat',()=>{
+test('RC13 fourth parity closure gates bundle repair furnace XP archaeology cooldown and critical combat',()=>{
   const s=read('tests/system/browser-1215.mjs')
   const spec=JSON.parse(read('tests/system/required-gates-1215.json'))
   const gates=['items.bundle-storage','items.anvil-repair','containers.furnace-xp','blocks.archaeology-brushing','combat.attack-cooldown','combat.critical-hit']
@@ -772,7 +772,7 @@ test('RC12 fourth parity closure gates bundle repair furnace XP archaeology cool
 })
 
 
-test('RC12 fifth parity closure gates target activator torch beacon and dragon fight state',()=>{
+test('RC13 fifth parity closure gates target activator torch beacon and dragon fight state',()=>{
   const s=read('tests/system/browser-1215.mjs')
   const spec=JSON.parse(read('tests/system/required-gates-1215.json'))
   const gates=['redstone.target-action','redstone.activator-rail-action','redstone.torch-burnout','containers.beacon-effect','bosses.dragon-fight-state']
@@ -785,7 +785,7 @@ test('RC12 fifth parity closure gates target activator torch beacon and dragon f
 })
 
 
-test('RC12 sixth parity closure gates survival combat enchantment consumable and border-update semantics',()=>{
+test('RC13 sixth parity closure gates survival combat enchantment consumable and border-update semantics',()=>{
   const s=read('tests/system/browser-1215.mjs')
   const spec=JSON.parse(read('tests/system/required-gates-1215.json'))
   const gates=['combat.shield-angle','combat.protection-enchant','combat.fire-aspect','survival.totem','items.potion-milk','world.border-updates']

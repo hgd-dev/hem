@@ -201,10 +201,11 @@ try {
   const requiredCapabilities = ['keybindings','renderDistanceSetting','rawMouseInput','resourcePackTextures','creativeInventory','debugOverlay','thirdPerson','sounds']
   const missingCapabilities = requiredCapabilities.filter(name => liveBuildIdentity.capabilities?.[name] !== true)
   if (missingCapabilities.length) throw new Error(`Built browser client lost required HEM capability signals: ${missingCapabilities.join(', ')}`)
-  if (!Array.isArray(liveBuildIdentity.upstreamAdvertisedVersions) || !liveBuildIdentity.upstreamAdvertisedVersions.length) throw new Error('Built browser client is missing upstream advertised-version attestation')
+  if (liveBuildIdentity.upstreamReleaseTag !== 'v0.1.98' || liveBuildIdentity.upstreamRelease1215 !== true) throw new Error('Built browser client is not tied to the known v0.1.98 1.21.5 release')
+  if (!Array.isArray(liveBuildIdentity.upstreamLiteralVersionTokens)) throw new Error('Built browser client is missing upstream literal-version provenance')
   if (!/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamSupportedVersionsSha256 || '')) throw new Error('Built browser client is missing upstream supportedVersions source hash')
-  if (liveBuildIdentity.compatibilityMode !== 'native-upstream-1215' || liveBuildIdentity.upstreamAdvertised1215 !== true) throw new Error(`HEM 1.21.5 requires native upstream support; got ${liveBuildIdentity.compatibilityMode}`)
-  pass('client.capability-contract', `upstream feature signals + preserved version attestation (${liveBuildIdentity.compatibilityMode})`)
+  if (liveBuildIdentity.compatibilityMode !== 'pinned-v0.1.98-1215-verified' || liveBuildIdentity.protocolVerified1215 !== true) throw new Error(`HEM 1.21.5 requires pinned v0.1.98 plus verified protocol/data; got ${liveBuildIdentity.compatibilityMode}`)
+  pass('client.capability-contract', `upstream feature signals + v0.1.98 provenance + verified 1.21.5 protocol/data (${liveBuildIdentity.compatibilityMode})`)
 
   await commandLogMatch(SHARED, 'seed', /424242/, 'Paper reports the configured shared-world seed', 10_000)
   pass('world.seed-authority', 'configured signed-64-bit/text seed transport reaches native Paper world generation authority')
@@ -2675,8 +2676,10 @@ try {
     upstreamRef: buildIdentity.upstreamRef,
     upstreamCommit: buildIdentity.upstreamCommit,
     upstreamPinned: buildIdentity.upstreamPinned === true,
-    upstreamAdvertisedVersions: buildIdentity.upstreamAdvertisedVersions,
-    upstreamAdvertised1215: buildIdentity.upstreamAdvertised1215 === true,
+    upstreamReleaseTag: buildIdentity.upstreamReleaseTag,
+    upstreamRelease1215: buildIdentity.upstreamRelease1215 === true,
+    upstreamLiteralVersionTokens: buildIdentity.upstreamLiteralVersionTokens,
+    protocolVerified1215: buildIdentity.protocolVerified1215 === true,
     upstreamSupportedVersionsSha256: buildIdentity.upstreamSupportedVersionsSha256,
     compatibilityMode: buildIdentity.compatibilityMode,
     soakMinutes: SOAK_MINUTES,

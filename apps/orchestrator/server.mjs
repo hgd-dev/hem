@@ -84,7 +84,7 @@ async function ensurePaperJar(){
   paperDownloadPromise=(async()=>{
     if(PAPER_VERSION!=='1.21.5'||PAPER_BUILD!=='114')throw new Error(`HEM 1.0 is pinned to Paper 1.21.5 build 114; got ${PAPER_VERSION} build ${PAPER_BUILD}`)
     await fsp.mkdir(path.dirname(PAPER_JAR),{recursive:true})
-    const ua='HEM/1.0.0-rc.12 (Hudson-Elise-Minecraft; private deployment)'
+    const ua='HEM/1.0.0-rc.13 (Hudson-Elise-Minecraft; private deployment)'
     const url=`https://fill-data.papermc.io/v1/objects/${PAPER_SHA256}/paper-${PAPER_VERSION}-${PAPER_BUILD}.jar`
     const jar=await fetch(url,{headers:{'user-agent':ua}})
     if(!jar.ok)throw new Error(`Paper jar HTTP ${jar.status}`)

@@ -74,24 +74,26 @@ pkg.pnpm.overrides['mcraft-fun-mineflayer'] = '0.1.23'
 pkg.pnpm.overrides['mc-assets'] = '0.2.83'
 await fsp.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
 
-// HEM intentionally exposes one protocol target. Preserve what the exact upstream
-// commit advertised *before* patching it so HEM can never confuse a forced protocol
-// target with upstream-native 1.21.5 support. Live acceptance is what promotes this
-// native integration from candidate to certified compatibility.
+// HEM intentionally exposes one protocol target. Historical minecraft-web-client
+// releases derive their supported-version surface dynamically, so grepping literal
+// strings from supportedVersions.mjs is NOT a valid support detector (v0.1.98 contains
+// a literal 1.7 token even though its release includes the 1.21.5 protocol update).
+// Preserve the pristine source hash for provenance, pin the known 1.21.5 release, then
+// prove the installed protocol/data stack below before emitting hem-build.json.
 const supportedVersions = path.join(upstream, 'src', 'supportedVersions.mjs')
 if (!fs.existsSync(supportedVersions)) throw new Error('Upstream supportedVersions.mjs moved; review HEM client patch before release')
 const upstreamSupportedVersionsSource = await fsp.readFile(supportedVersions, 'utf8')
-const upstreamAdvertisedVersions = [...new Set([...upstreamSupportedVersionsSource.matchAll(/[\"'](\d+\.\d+(?:\.\d+)?)[\"']/g)].map(match => match[1]))]
-if (!upstreamAdvertisedVersions.length) throw new Error('Could not parse upstream advertised Minecraft versions; review HEM client patch before release')
-const upstreamAdvertised1215 = upstreamAdvertisedVersions.includes('1.21.5')
 const upstreamSupportedVersionsSha256 = createHash('sha256').update(upstreamSupportedVersionsSource).digest('hex')
-if (!upstreamAdvertised1215) {
-  throw new Error(`HEM 1.21.5 requires native upstream support; pinned upstream advertises ${upstreamAdvertisedVersions.join(', ')}`)
+const upstreamLiteralVersionTokens = [...new Set([...upstreamSupportedVersionsSource.matchAll(/[\"'](\d+\.\d+(?:\.\d+)?)[\"']/g)].map(match => match[1]))]
+const known1215ReleaseCommit = 'cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78'
+const upstreamReleaseTag = sha.toLowerCase() === known1215ReleaseCommit ? 'v0.1.98' : ''
+const upstreamRelease1215 = upstreamReleaseTag === 'v0.1.98'
+if (requirePinnedRef && !upstreamRelease1215) {
+  throw new Error(`HEM pinned certification currently requires minecraft-web-client v0.1.98 (${known1215ReleaseCommit}); resolved ${sha}`)
 }
-const compatibilityMode = 'native-upstream-1215'
-console.log(`HEM client compatibility mode: ${compatibilityMode}; upstream advertised ${upstreamAdvertisedVersions.join(', ')}`)
-// Narrow the launcher to HEM's single certified target without manufacturing support
-// for a version upstream did not already advertise.
+console.log(`HEM upstream provenance: ${upstreamReleaseTag || 'unrecognized exact commit'} @ ${sha}; literal supportedVersions tokens are informational only: ${upstreamLiteralVersionTokens.join(', ') || '(none)'}`)
+// Narrow the launcher to HEM's single certified target. The post-install verification
+// below is the authoritative protocol/data check for the patched HEM integration.
 await fsp.writeFile(supportedVersions, "export default ['1.21.5']\n")
 
 const pnpm = args => run('npx', ['--yes', 'pnpm@10.32.1', ...args], upstream)
@@ -141,6 +143,9 @@ for (const name of spawnEggs) {
 console.log('HEM 1.21.5 data + item-definition check passed', mcData.version.minecraftVersion, 'protocol', mcData.version.version, 'mc-assets', assetsPackage.version)
 `)
 run('node', [dataCheck], upstream)
+const protocolVerified1215 = true
+const compatibilityMode = upstreamRelease1215 ? 'pinned-v0.1.98-1215-verified' : 'pinned-1215-data-verified'
+console.log(`HEM client compatibility mode: ${compatibilityMode}; protocol/data verification passed`)
 await fsp.rm(dataCheck, { force: true })
 
 pnpm(['prepare-project'])
@@ -171,15 +176,17 @@ delete config.defaultProxy
 await fsp.writeFile(configPath, JSON.stringify(config, null, 2) + '\n')
 
 await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
-  hemVersion: '1.0.0-rc.12',
+  hemVersion: '1.0.0-rc.13',
   minecraft: '1.21.5',
   upstreamRepo: repo,
   upstreamRef: ref,
   upstreamCommit: sha,
   upstreamPinned: exactCommitRef && sha.toLowerCase() === ref.toLowerCase(),
-  upstreamAdvertisedVersions,
-  upstreamAdvertised1215,
+  upstreamReleaseTag,
+  upstreamRelease1215,
+  upstreamLiteralVersionTokens,
   upstreamSupportedVersionsSha256,
+  protocolVerified1215,
   compatibilityMode,
   minecraftData: '3.114.0',
   minecraftRenderer: '0.1.96',

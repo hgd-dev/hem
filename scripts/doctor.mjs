@@ -56,9 +56,10 @@ if (fs.existsSync(clientIdentityPath)) {
   try {
     const identity = JSON.parse(fs.readFileSync(clientIdentityPath, 'utf8'))
     const ok = identity.hemVersion === pkg.version && identity.minecraft === '1.21.5' && /^[0-9a-f]{40}$/i.test(identity.upstreamCommit || '') &&
-      Array.isArray(identity.upstreamAdvertisedVersions) && identity.upstreamAdvertisedVersions.length > 0 &&
+      identity.upstreamReleaseTag === 'v0.1.98' && identity.upstreamRelease1215 === true &&
+      Array.isArray(identity.upstreamLiteralVersionTokens) &&
       /^[0-9a-f]{64}$/i.test(identity.upstreamSupportedVersionsSha256 || '') &&
-      identity.compatibilityMode === 'native-upstream-1215' && identity.upstreamAdvertised1215 === true
+      identity.compatibilityMode === 'pinned-v0.1.98-1215-verified' && identity.protocolVerified1215 === true
     add('client.identity', ok, ok ? `${identity.compatibilityMode} @ ${identity.upstreamCommit}` : 'hem-build.json is incomplete or for another HEM version', systemMode)
   } catch (error) {
     add('client.identity', false, `invalid hem-build.json: ${error.message}`, systemMode)

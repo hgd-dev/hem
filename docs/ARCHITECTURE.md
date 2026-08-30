@@ -63,7 +63,7 @@ Both use exactly the same Paper 1.21.5 path.
 
 ## Browser compatibility layer
 
-The browser client is built reproducibly from the exact `zardoy/minecraft-web-client` v0.1.98 release commit `cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78`, the upstream release that added 1.21.5 protocol support. HEM patches:
+The browser client is built reproducibly from the exact `zardoy/minecraft-web-client` v0.1.98 release commit `cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78`, the upstream release whose notes include the 1.21.5 protocol-support update. HEM patches:
 
 - `minecraft-data` override → `3.114.0`;
 - the exposed supported-version list → only `1.21.5`;
