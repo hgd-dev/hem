@@ -1,6 +1,6 @@
 plugins { java }
 group = "com.hemcraft"
-version = "1.0.0-rc.14"
+version = "1.0.0-rc.15"
 repositories { mavenCentral(); maven("https://repo.papermc.io/repository/maven-public/") }
 dependencies { compileOnly("io.papermc.paper:paper-api:1.21.5-R0.1-SNAPSHOT") }
 java { toolchain.languageVersion.set(JavaLanguageVersion.of(21)) }

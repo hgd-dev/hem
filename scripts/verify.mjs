@@ -47,7 +47,7 @@ const systemCompose=fs.readFileSync(path.join(root,'tests/system/docker-compose.
 const checks=[
   ['Paper 1.21.5 build 114 authority',/1\.21\.5/.test(orch)&&/PAPER_BUILD[^\n]+114/.test(orch)&&/2ae6ae22adf417699746e0f89fc2ef6cb6ee050a5f6608cee58f0535d60b509e/.test(orch)],['one world per Paper dir',/path\.join\(ROOT,id\)/.test(orch)],
   ['launch token one-use',/consumed_at IS NULL/.test(hub)&&/UPDATE launch_sessions SET consumed_at/.test(hub)],
-  ['membership gate',/requireMembership/.test(hub)],['client 1.21.5 target',/supportedVersions\.mjs/.test(client)&&/1\.21\.5/.test(client)&&/require\('minecraft-renderer\/package\.json'\)\.version/.test(client)&&/require\('minecraft-inventory\/package\.json'\)\.version/.test(client)&&/--frozen-lockfile/.test(client)],
+  ['membership gate',/requireMembership/.test(hub)],['client 1.21.5 target',/supportedVersions\.mjs/.test(client)&&/1\.21\.5/.test(client)&&/minecraftRenderer: dependencyVersion\('minecraft-renderer'/.test(client)&&/minecraftInventory: dependencyVersion\('minecraft-inventory'/.test(client)&&/mineflayerConnector: dependencyVersion\('mcraft-fun-mineflayer'/.test(client)&&/--frozen-lockfile/.test(client)],
   ['auto connect explicit',/allowAutoConnect\s*=\s*true/.test(client)],['Paper auth gate',/HEM launch authorization expired/.test(plugin)],
   ['secrets not query params',!/searchParams\.set\(['"]hemToken/.test(fs.readFileSync(path.join(root,'apps/hub/src/lib.mjs'),'utf8'))],
   ['graceful Paper shutdown',/save-all flush/.test(orch)&&/45_000/.test(orch)],

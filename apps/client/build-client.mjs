@@ -153,11 +153,41 @@ if (spawnEggs.length < 50) throw new Error('HEM 1.21.5 spawn-egg registry unexpe
 for (const name of spawnEggs) {
   if (!itemDefinitions.latest?.[name]) throw new Error('HEM mc-assets missing native 1.21.5 spawn-egg item definition: ' + name)
 }
+const rootPackage = require('./package.json')
+const dependencyVersion = (name, localCandidates = []) => {
+  try { return require(name + '/package.json').version } catch {}
+  // Some historical packages do not expose package.json through Node resolution.
+  // Resolve the package entrypoint, then walk upward to the nearest package.json.
+  try {
+    const pathApi = require('path')
+    const fsApi = require('fs')
+    let cursor = pathApi.dirname(require.resolve(name))
+    for (;;) {
+      const candidate = pathApi.join(cursor, 'package.json')
+      if (fsApi.existsSync(candidate)) {
+        const meta = JSON.parse(fsApi.readFileSync(candidate, 'utf8'))
+        if (meta.version) return meta.version
+      }
+      const parent = pathApi.dirname(cursor)
+      if (parent === cursor) break
+      cursor = parent
+    }
+  } catch {}
+  for (const rel of localCandidates) {
+    try {
+      const local = require('path').resolve(rel, 'package.json')
+      if (require('fs').existsSync(local)) return require(local).version || ('workspace:' + rel)
+    } catch {}
+  }
+  const declared = rootPackage.dependencies?.[name] || rootPackage.devDependencies?.[name] || rootPackage.optionalDependencies?.[name]
+  if (declared) return 'declared:' + declared
+  return 'embedded-or-transitive'
+}
 const versions = {
   minecraftData: require('minecraft-data/package.json').version,
-  minecraftRenderer: require('minecraft-renderer/package.json').version,
-  minecraftInventory: require('minecraft-inventory/package.json').version,
-  mineflayerConnector: require('mcraft-fun-mineflayer/package.json').version,
+  minecraftRenderer: dependencyVersion('minecraft-renderer', ['./renderer', './packages/minecraft-renderer']),
+  minecraftInventory: dependencyVersion('minecraft-inventory', ['./packages/minecraft-inventory']),
+  mineflayerConnector: dependencyVersion('mcraft-fun-mineflayer', ['./packages/mcraft-fun-mineflayer']),
   mcAssets: assetsPackage.version,
 }
 console.log('HEM 1.21.5 data + item-definition check passed', mcData.version.minecraftVersion, 'protocol', mcData.version.version, versions)
@@ -200,7 +230,7 @@ delete config.defaultProxy
 await fsp.writeFile(configPath, JSON.stringify(config, null, 2) + '\n')
 
 await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
-  hemVersion: '1.0.0-rc.14',
+  hemVersion: '1.0.0-rc.15',
   minecraft: '1.21.5',
   upstreamRepo: repo,
   upstreamRef: ref,

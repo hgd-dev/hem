@@ -219,13 +219,15 @@ test('client build rejects stale registries before bundling',()=>{
   const b=read('apps/client/build-client.mjs')
   assert.match(b,/minecraft-data'\)\('1\.21\.5'\)/)
   for (const name of ['mace','wind_charge','brown_egg','blue_egg','firefly_bush','leaf_litter','wildflowers','short_dry_grass','tall_dry_grass','cactus_flower','trial_spawner','vault']) assert.ok(b.includes(name), `missing registry sentinel ${name}`)
-  assert.match(b,/minecraftRenderer: require\('minecraft-renderer\/package\.json'\)\.version/)
-  assert.match(b,/minecraftInventory: require\('minecraft-inventory\/package\.json'\)\.version/)
-  assert.match(b,/mineflayerConnector: require\('mcraft-fun-mineflayer\/package\.json'\)\.version/)
+  assert.match(b,/minecraftRenderer: dependencyVersion\('minecraft-renderer'/)
+  assert.match(b,/minecraftInventory: dependencyVersion\('minecraft-inventory'/)
+  assert.match(b,/mineflayerConnector: dependencyVersion\('mcraft-fun-mineflayer'/)
   assert.match(b,/roundTrip\(mcData\.itemsArray/)
   assert.match(b,/roundTrip\(mcData\.blocksArray/)
   assert.match(b,/roundTrip\(mcData\.entitiesArray/)
   assert.match(b,/mcData\.version\?\.version !== 770/)
+  assert.match(b,/return 'declared:' \+ declared/)
+  assert.match(b,/return 'embedded-or-transitive'/)
 })
 
 test('client build uses the frozen release asset dependency and validates its 1.21.5 item-definition layer',()=>{

@@ -1,4 +1,4 @@
-# HEM RC14 verification record
+# HEM RC15 verification record
 
 Date: 2026-08-30
 
@@ -6,7 +6,7 @@ Date: 2026-08-30
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **83/83 passing** source/logic/security/release-gate tests in the current RC14 local pass.
+- `npm test`: **83/83 passing** source/logic/security/release-gate tests in the current RC15 local pass.
 - `npm run verify`: **53/53 release contracts passing** across 93 source files.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
@@ -38,9 +38,9 @@ Those operations are encoded in CI instead of being claimed as completed.
 
 Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/system-1215.yml` certification is green for 60 minutes, the production Cloudflare R2 restore has passed, and `docs/MANUAL_ACCEPTANCE.md` is signed off. `npm run promote` is the supported transition.
 
-## RC14 frozen-dependency hotfix
-- RC14 keeps the exact v0.1.98 source commit but stops rewriting its Prismarine dependency overrides. RC13's unfrozen install could re-resolve a moving `minecraft-protocol#master` dependency while retaining an older v0.1.98 patch, which is the `ERR_PNPM_PATCH_FAILED` seen in GitHub Actions.
-- RC14 treats the v0.1.98 lockfile as release provenance: it hashes `package.json` and `pnpm-lock.yaml`, uses the package's declared pnpm version, installs with `--frozen-lockfile`, verifies neither metadata file changed, and records those hashes plus the actual installed dependency versions in `hem-build.json`.
+## RC15 frozen-dependency hotfix
+- RC15 keeps the exact v0.1.98 source commit but stops rewriting its Prismarine dependency overrides. RC13's unfrozen install could re-resolve a moving `minecraft-protocol#master` dependency while retaining an older v0.1.98 patch, which is the `ERR_PNPM_PATCH_FAILED` seen in GitHub Actions.
+- RC15 treats the v0.1.98 lockfile as release provenance: it hashes `package.json` and `pnpm-lock.yaml`, uses the package's declared pnpm version, installs with `--frozen-lockfile`, verifies neither metadata file changed, and records those hashes plus the actual installed dependency versions in `hem-build.json`.
 - Protocol/data certification remains fail-closed: after the frozen install HEM still requires Minecraft 1.21.5 / protocol 770 / DataVersion 4325, required Spring to Life registries, full item/block/entity round-trips and the 1.21.5 item-definition layer before any browser bundle can be emitted.
 
 ## RC13 upstream pin hotfix
@@ -76,3 +76,8 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - RC11 expands browser-facing Options with FOV, sensitivity, render distance, view bobbing, smooth lighting, sky/day-cycle, raw input, master/music volume, high contrast and reduced motion.
 - RC11 adds original synthesized HEM feedback audio and a damage vignette without redistributing Mojang assets.
 - The live suite now includes native worldgen/structure locates, seed authority, random ticks, survival mining timing, archaeology brushing/modern blocks, broad workstations plus real brewing/smithing/grindstone results, item durability/components/bundles, furnace XP, elytra/fireworks, attack cooldown/criticals, directional shields, Protection IV, Fire Aspect, Totems, potion→milk clearing, bow/wind-charge/mace paths, Spring to Life growth/variants, Java quasi-connectivity, Crafter/target/observer/tripwire/activator-rail/torch-burnout redstone behavior, paid beacon effects, villager trading, sculk vibration, minecart/boat/mount inventories, End Gateway + dragon exit-fountain state, HUD/scoreboard/team packets, dynamic world-border updates, recipe/statistics/advancement synchronization, command completion and real remote leave/rejoin events.
+
+## RC15 verifier-layout hotfix
+- RC15 keeps RC14's exact v0.1.98 frozen dependency graph, but stops assuming every historical renderer/UI dependency exposes `package.json` through Node's package resolver. GitHub Actions proved the frozen install succeeded and only the HEM metadata probe failed on `minecraft-renderer/package.json`.
+- The post-install verifier now resolves dependency versions when package metadata is directly exposed, checks known historical workspace locations, and otherwise records the dependency declaration/embedded-transitive status. The release-critical 1.21.5 checks remain the actual registry/protocol/data assertions: Minecraft 1.21.5, protocol 770, DataVersion 4325, modern blocks/items/entities, 1.21.5 item definitions, and spawn-egg assets.
+- This change does not weaken the frozen-lockfile provenance or live two-browser acceptance gates; it removes a false negative from an informational dependency-version field.
