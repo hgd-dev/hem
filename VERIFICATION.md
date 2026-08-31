@@ -1,4 +1,4 @@
-# HEM RC15 verification record
+# HEM RC16 verification record
 
 Date: 2026-08-30
 
@@ -6,7 +6,7 @@ Date: 2026-08-30
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **83/83 passing** source/logic/security/release-gate tests in the current RC15 local pass.
+- `npm test`: **84/84 passing** source/logic/security/release-gate tests in the current RC15 local pass.
 - `npm run verify`: **53/53 release contracts passing** across 93 source files.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
@@ -57,7 +57,7 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - Expanded two-browser gates for normal keyboard movement, block placement, jump/fall damage, hunger/death/respawn, armor/offhand, 3×3 crafting, barrel/ender-chest isolation, repeaters/redstone dust, time/weather/difficulty, world border, native portal entry and representative entity families.
 - Deterministic Docker+rclone-local cold-backup restore/rollback drill; this proves recovery logic while leaving real Cloudflare R2 transport as a separate final manual requirement.
 - `npm run parity` reports the machine-parsed ledger; `npm run release:guard` uses the finite `docs/RELEASE_BLOCKERS.md` promotion list rather than requiring every compatibility-roadmap row to be PASS, while still requiring pinned 60-minute certification for final 1.0.0.
-- 83/83 local tests and 53/53 release contracts.
+- 84/84 local tests and 53/53 release contracts.
 - Browser refresh recovery via a five-minute rotating one-use in-memory resume lease delivered over `hem:session`; the original launch token remains one-use and URL-fragment-only.
 - Post-auth skin profile re-announcement plus reciprocal two-browser custom-texture fetch assertions.
 - Test-only forced Paper crash endpoint, gated by `HEM_ENABLE_TEST_FAULTS`, with world/player persistence recovery assertions.
@@ -81,3 +81,8 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - RC15 keeps RC14's exact v0.1.98 frozen dependency graph, but stops assuming every historical renderer/UI dependency exposes `package.json` through Node's package resolver. GitHub Actions proved the frozen install succeeded and only the HEM metadata probe failed on `minecraft-renderer/package.json`.
 - The post-install verifier now resolves dependency versions when package metadata is directly exposed, checks known historical workspace locations, and otherwise records the dependency declaration/embedded-transitive status. The release-critical 1.21.5 checks remain the actual registry/protocol/data assertions: Minecraft 1.21.5, protocol 770, DataVersion 4325, modern blocks/items/entities, 1.21.5 item definitions, and spawn-egg assets.
 - This change does not weaken the frozen-lockfile provenance or live two-browser acceptance gates; it removes a false negative from an informational dependency-version field.
+
+## RC16 orchestrator Java-runtime hotfix
+- GitHub Actions proved the RC15 browser build advanced far enough to build the orchestrator image, where Debian Bookworm rejected `openjdk-21-jre-headless` because that package is not available from its default repositories.
+- RC16 keeps the Node 22 Bookworm runtime but copies the Java 21 JRE from `eclipse-temurin:21-jre-jammy`, sets `JAVA_HOME`/`PATH`, and executes `java -version` during the image build. The orchestrator no longer depends on Bookworm apt for Java 21.
+- A release contract rejects any regression back to `apt-get install openjdk-21-jre-headless`.

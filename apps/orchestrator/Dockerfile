@@ -3,8 +3,18 @@ WORKDIR /src
 COPY apps/server-plugin/ ./
 RUN gradle --no-daemon clean build
 
+# Keep Node 22 on Debian Bookworm, but source Java 21 from an image that
+# actually ships the runtime instead of relying on Bookworm's apt repos.
+FROM eclipse-temurin:21-jre-jammy AS java-runtime
+
 FROM node:22-bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends openjdk-21-jre-headless ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=java-runtime /opt/java/openjdk /opt/java/openjdk
+ENV JAVA_HOME=/opt/java/openjdk
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && java -version
 WORKDIR /opt/hem
 COPY apps/orchestrator/package.json ./package.json
 COPY apps/orchestrator/server.mjs ./server.mjs

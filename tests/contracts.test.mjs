@@ -805,3 +805,12 @@ test('RC13 sixth parity closure gates survival combat enchantment consumable and
   }
   for(const marker of ['rear projectile bypasses frontal shield arc','Protection enchantment mitigation failed','browser Fire Aspect hit ignites target','totem prevents lethal damage and is consumed','browser drinking milk clears active potion effects','world_border_lerp_size']) assert.ok(s.includes(marker),`missing sixth-closure live marker ${marker}`)
 })
+
+test('RC16 orchestrator image sources Java 21 from a real JRE image instead of Bookworm apt',()=>{
+  const d=read('apps/orchestrator/Dockerfile')
+  assert.match(d,/FROM eclipse-temurin:21-jre-jammy AS java-runtime/)
+  assert.match(d,/COPY --from=java-runtime \/opt\/java\/openjdk \/opt\/java\/openjdk/)
+  assert.match(d,/ENV JAVA_HOME=\/opt\/java\/openjdk/)
+  assert.match(d,/java -version/)
+  assert.doesNotMatch(d,/apt-get install[^\n]*openjdk-21-jre-headless/)
+})
