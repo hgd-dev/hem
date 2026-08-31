@@ -1,12 +1,12 @@
-# HEM RC17 verification record
+# HEM RC18 verification record
 
-Date: 2026-08-30
+Date: 2026-08-31
 
 ## Completed in the build sandbox
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **85/85 passing** source/logic/security/release-gate tests in the current RC17 local pass.
+- `npm test`: **85/85 passing** source/logic/security/release-gate tests in the current RC18 local pass.
 - `npm run verify`: **53/53 release contracts passing** across 93 source files.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
@@ -91,3 +91,9 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - GitHub Actions advanced through the browser client and orchestrator-image stages, then proved the proxy image failed because `npm install --omit=dev` resolves the git-based `net-browserify` dependency while `node:22-bookworm-slim` does not contain `git`.
 - RC17 uses a dedicated dependency stage that installs only `git` and `ca-certificates`, resolves production npm dependencies there, and copies `node_modules` into a clean Node 22 Bookworm runtime image. Git is therefore available where npm needs it without being shipped in the runtime layer.
 - A release contract locks the two-stage proxy build so this failure cannot silently regress.
+
+## RC18 launcher drag-certification hotfix
+- GitHub Actions advanced through the browser-client build, orchestrator image, proxy image, and both launcher/client test origins before failing only in the launcher drag-rotation assertion.
+- The 3D preview already set `__hemPreviewDragged = true` during pointer movement, but the normal click-suppression handler deliberately reset that transient flag after mouse-up so a drag would not open the PNG picker. The acceptance test read the transient flag after release and therefore produced a false negative even when rotation input had executed.
+- RC18 adds a persistent per-canvas `__hemPreviewDragCount` that increments once for each real pointer drag while keeping the transient click-suppression flag unchanged. The Playwright gate now records the counter before and after an actual `page.mouse` drag and requires it to increase, so drag rotation remains mandatory without racing the click cleanup path.
+- Release contracts require both the persistent drag counter and the before/after Playwright assertion, preventing regression back to the false-negative signal.

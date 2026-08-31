@@ -151,6 +151,7 @@ class SkinPreview3D {
     this.yaw = -0.5
     this.pitch = -0.08
     this.dragging = false
+    this.dragCounted = false
     this.lastX = 0
     this.lastY = 0
     this.lastInteraction = 0
@@ -165,6 +166,7 @@ class SkinPreview3D {
     const c = this.canvas
     c.addEventListener('pointerdown', event => {
       this.dragging = true
+      this.dragCounted = false
       this.lastX = event.clientX
       this.lastY = event.clientY
       this.lastInteraction = performance.now()
@@ -174,7 +176,13 @@ class SkinPreview3D {
     c.addEventListener('pointermove', event => {
       if (!this.dragging) return
       const dx = event.clientX - this.lastX, dy = event.clientY - this.lastY
-      if (Math.abs(dx) + Math.abs(dy) > 2) c.__hemPreviewDragged = true
+      if (Math.abs(dx) + Math.abs(dy) > 2) {
+        c.__hemPreviewDragged = true
+        if (!this.dragCounted) {
+          c.__hemPreviewDragCount = Number(c.__hemPreviewDragCount || 0) + 1
+          this.dragCounted = true
+        }
+      }
       this.yaw += dx * 0.012
       this.pitch = Math.max(-0.55, Math.min(0.35, this.pitch + dy * 0.008))
       this.lastX = event.clientX

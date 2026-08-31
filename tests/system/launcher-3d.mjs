@@ -37,12 +37,14 @@ try {
 
   const box = await page.locator('#regSkinPreview').boundingBox()
   if (!box) throw new Error('HEM launcher skin preview has no layout box')
+  const dragCountBefore = await page.evaluate(() => Number(document.querySelector('#regSkinPreview')?.__hemPreviewDragCount || 0))
   await page.mouse.move(box.x + box.width * 0.45, box.y + box.height * 0.45)
   await page.mouse.down()
   await page.mouse.move(box.x + box.width * 0.72, box.y + box.height * 0.38, { steps: 8 })
   await page.mouse.up()
-  const dragged = await page.evaluate(() => document.querySelector('#regSkinPreview')?.__hemPreviewDragged === true)
-  if (!dragged) throw new Error('HEM launcher 3D skin preview did not register drag rotation')
+  const dragCountAfter = await page.evaluate(() => Number(document.querySelector('#regSkinPreview')?.__hemPreviewDragCount || 0))
+  const dragged = dragCountAfter > dragCountBefore
+  if (!dragged) throw new Error(`HEM launcher 3D skin preview did not register drag rotation (${dragCountBefore} -> ${dragCountAfter})`)
 
   // Exercise HEM's actual Options controls in-browser. The static launcher does
   // not have a Hub API identity, so expose the screen directly, save through the
