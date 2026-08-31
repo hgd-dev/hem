@@ -34,7 +34,8 @@ test('Paper is offline-mode only behind HEM one-time gate',()=>{
 
 test('client build targets modern 1.21.5 data and enables auto connect',()=>{
   const b=read('apps/client/build-client.mjs')
-  assert.match(b,/minecraft-data'\]\s*=\s*'3\.114\.0'/)
+  assert.match(b,/require\('minecraft-data'\)\('1\.21\.5'\)/)
+  assert.match(b,/--frozen-lockfile/)
   assert.match(b,/supportedVersions\.mjs/)
   assert.match(b,/\['1\.21\.5'\]/)
   assert.match(b,/allowAutoConnect\s*=\s*true/)
@@ -218,22 +219,22 @@ test('client build rejects stale registries before bundling',()=>{
   const b=read('apps/client/build-client.mjs')
   assert.match(b,/minecraft-data'\)\('1\.21\.5'\)/)
   for (const name of ['mace','wind_charge','brown_egg','blue_egg','firefly_bush','leaf_litter','wildflowers','short_dry_grass','tall_dry_grass','cactus_flower','trial_spawner','vault']) assert.ok(b.includes(name), `missing registry sentinel ${name}`)
-  assert.match(b,/minecraft-renderer'\] = '0\.1\.96'/)
-  assert.match(b,/minecraft-inventory'\] = '0\.1\.47'/)
-  assert.match(b,/mcraft-fun-mineflayer'\] = '0\.1\.23'/)
+  assert.match(b,/minecraftRenderer: require\('minecraft-renderer\/package\.json'\)\.version/)
+  assert.match(b,/minecraftInventory: require\('minecraft-inventory\/package\.json'\)\.version/)
+  assert.match(b,/mineflayerConnector: require\('mcraft-fun-mineflayer\/package\.json'\)\.version/)
   assert.match(b,/roundTrip\(mcData\.itemsArray/)
   assert.match(b,/roundTrip\(mcData\.blocksArray/)
   assert.match(b,/roundTrip\(mcData\.entitiesArray/)
   assert.match(b,/mcData\.version\?\.version !== 770/)
 })
 
-test('client build pins and validates the modern 1.21.5 item-definition asset layer',()=>{
+test('client build uses the frozen release asset dependency and validates its 1.21.5 item-definition layer',()=>{
   const b=read('apps/client/build-client.mjs')
-  assert.match(b,/mc-assets'\] = '0\.2\.83'/)
+  assert.match(b,/const assetsPackage = require\('mc-assets\/package\.json'\)/)
   assert.match(b,/itemDefinitions\.json/)
   assert.match(b,/hasOwnProperty\.call\(itemDefinitions, '1\.21\.5'\)/)
   for (const name of ['mace','wind_charge','firefly_bush','leaf_litter','wildflowers','cactus_flower']) assert.ok(b.includes(name), `missing 1.21.5 item-definition sentinel ${name}`)
-  assert.match(b,/mcAssets: '0\.2\.83'/)
+  assert.match(b,/mcAssets: assetsPackage\.version/)
 })
 
 test('runtime bridge exposes secret-free 1.21.5 parity diagnostics',()=>{
@@ -502,7 +503,8 @@ test('browser build contract exposes release-critical upstream client capabiliti
   for (const capability of ['keybindings','renderDistanceSetting','rawMouseInput','resourcePackTextures','creativeInventory','debugOverlay','thirdPerson','sounds']) assert.ok(b.includes(capability),`missing capability contract ${capability}`)
   assert.match(b,/HEM upstream capability contract missing/)
   assert.match(b,/capabilities,/)
-  assert.match(b,/minecraftData: '3\.114\.0'/)
+  assert.match(b,/minecraftData: require\('minecraft-data\/package\.json'\)\.version/)
+  assert.match(b,/upstreamLockSha256/)
 })
 
 test('HEM options forward a Minecraft-style video/input/audio profile and can open upstream keybindings on next launch',()=>{
@@ -635,17 +637,22 @@ test('RC13 has no unimplemented parity TODOs but still refuses the full-parity c
   for(const gate of spec.required) assert.ok(system.includes(`pass('${gate}'`)||system.includes(`pass(\"${gate}\"`),`required gate has no system pass site: ${gate}`)
 })
 
-test('client build preserves upstream provenance and verifies 1.21.5 protocol/data before bundling',()=>{
+test('client build preserves frozen upstream provenance and verifies 1.21.5 protocol/data before bundling',()=>{
   const b=read('apps/client/build-client.mjs')
   const system=read('tests/system/browser-1215.mjs')
   const verifier=read('scripts/verify-certification.mjs')
   assert.match(b,/upstreamReleaseTag/); assert.match(b,/protocolVerified1215/); assert.match(b,/upstreamLiteralVersionTokens/)
   assert.match(b,/upstreamSupportedVersionsSha256/)
-  assert.match(b,/pinned-v0\.1\.98-1215-verified/)
+  assert.match(b,/pinned-v0\.1\.98-lockfile-1215-verified/)
+  assert.match(b,/--frozen-lockfile/)
+  assert.doesNotMatch(b,/--no-frozen-lockfile/)
+  assert.match(b,/upstreamLockSha256/)
+  assert.match(b,/upstreamPackageSha256/)
+  assert.match(b,/frozenLockfile: true/)
   assert.match(b,/literal supportedVersions tokens are informational only/)
   assert.match(b,/createHash\('sha256'\)\.update\(upstreamSupportedVersionsSource\)/)
   assert.match(system,/compatibilityMode: buildIdentity\.compatibilityMode/)
-  assert.match(verifier,/pinned v0\.1\.98 plus verified 1\.21\.5 protocol\/data/)
+  assert.match(verifier,/pinned v0\.1\.98 frozen dependencies plus verified 1\.21\.5 protocol\/data/)
   const workflow=read('.github/workflows/system-1215.yml')
   assert.match(b,/cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78/)
   assert.match(workflow,/default: cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78/)

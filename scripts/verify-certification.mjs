@@ -37,7 +37,9 @@ if (requirePinned && (cert.upstreamPinned !== true || cert.upstreamRef !== cert.
 if (cert.upstreamReleaseTag !== 'v0.1.98' || cert.upstreamRelease1215 !== true) throw new Error('Certification is not tied to the known minecraft-web-client v0.1.98 1.21.5 release')
 if (!Array.isArray(cert.upstreamLiteralVersionTokens) || cert.upstreamLiteralVersionTokens.some(version => typeof version !== 'string')) throw new Error('Certification upstream literal-version provenance is malformed')
 if (!/^[0-9a-f]{64}$/i.test(cert.upstreamSupportedVersionsSha256 || '')) throw new Error('Certification is missing the upstream supportedVersions source hash')
-if (cert.compatibilityMode !== 'pinned-v0.1.98-1215-verified' || cert.protocolVerified1215 !== true) throw new Error(`Certification requires pinned v0.1.98 plus verified 1.21.5 protocol/data; mode=${cert.compatibilityMode}`)
+if (!/^[0-9a-f]{64}$/i.test(cert.upstreamPackageSha256 || '') || !/^[0-9a-f]{64}$/i.test(cert.upstreamLockSha256 || '')) throw new Error('Certification is missing frozen upstream package/lock hashes')
+if (cert.frozenLockfile !== true) throw new Error('Certification did not use the pinned v0.1.98 frozen lockfile')
+if (cert.compatibilityMode !== 'pinned-v0.1.98-lockfile-1215-verified' || cert.protocolVerified1215 !== true) throw new Error(`Certification requires pinned v0.1.98 frozen dependencies plus verified 1.21.5 protocol/data; mode=${cert.compatibilityMode}`)
 if (!Array.isArray(cert.gates) || cert.gates.some(id => typeof id !== 'string')) throw new Error('Certification gates are malformed')
 if (new Set(cert.gates).size !== cert.gates.length) throw new Error('Certification contains duplicate gate IDs')
 

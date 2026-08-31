@@ -39,7 +39,7 @@ HEM is a private, browser-native clean-room reproduction. It does **not** redist
 - PARTIAL RC11 adds Crafter state synchronization and a real redstone-triggered 9-iron-nugget→iron-ingot craft/output gate; slot locking, comparator semantics and exhaustive recipe timing remain
 
 ## Inventory, items, recipes and data components
-- PARTIAL every 1.21.5 item registry entry is build-time round-trip checked; `mc-assets` 0.2.83 must expose the native 1.21.5 item-definition layer including Spring to Life items and every registered spawn egg, while exhaustive live rendering remains
+- PARTIAL every 1.21.5 item registry entry is build-time round-trip checked; the frozen upstream `mc-assets` dependency must expose the native 1.21.5 item-definition layer including Spring to Life items and every registered spawn egg, while exhaustive live rendering remains
 - PARTIAL distinct server-authoritative player inventories, armor slot and offhand equipment are named live gates and persistence is encoded; cursor/creative edge semantics remain
 - PARTIAL the pinned upstream client is build-contract checked for its creative-inventory/JEI feature surface; live 1.21.5 search/hotbar-saving acceptance remains
 - PARTIAL browser-origin 2x2 player crafting plus a true 3x3 crafting-table recipe are named live gates; recipe-book/full recipe corpus remains
@@ -134,7 +134,7 @@ HEM is a private, browser-native clean-room reproduction. It does **not** redist
 
 ## Rendering and presentation
 - PARTIAL HEM now refuses release unless live renderer chunk-section meshes exist while modern Crafter/Trial Spawner/Vault/Copper Bulb blockstates are loaded; exhaustive models remain
-- PARTIAL the build pins `mc-assets` 0.2.83 and rejects a missing native 1.21.5 item-definition layer or missing Spring to Life item definitions; live exhaustive GUI/hand/world item rendering remains
+- PARTIAL the build preserves the pinned v0.1.98 dependency graph and rejects a missing native 1.21.5 item-definition layer or missing Spring to Life item definitions; live exhaustive GUI/hand/world item rendering remains
 - PARTIAL RC11 retains broad entity/equipment synchronization and adds a rendered-canvas smoke gate across dimensions; exhaustive model/pose/equipment-layer visual comparison remains
 - PARTIAL the pinned client capability contract includes perspective support and RC11 adds broader FOV/bobbing settings plus rendered-frame acceptance; exhaustive first/third-person animation equivalence remains
 - PARTIAL the browser renderer is exercised under live gameplay and RC11 adds rendered-frame/presentation acceptance; exhaustive particle-family visual equivalence remains
@@ -178,7 +178,7 @@ HEM is a private, browser-native clean-room reproduction. It does **not** redist
 - PARTIAL R2 backup checksum + remote `rclone check` + guarded restore/automatic rollback helper are implemented; RC11 adds a deterministic Docker+rclone-local system drill proving good restore, post-backup mutation replacement and rollback after an invalid destructive restore, but a real disposable clean-host Cloudflare R2 transport drill is still required
 
 ## Certification/reproducibility
-- PASS local source contracts require protocol 770, complete registry round-trips, `mc-assets` 0.2.83 modern item definitions, one-use launch/resume credentials, crash-recovery hooks, executable backup/restore rollback safeguards and the 60-minute system-soak definition
+- PASS local source contracts require protocol 770, complete registry round-trips, the frozen upstream modern item-definition layer, one-use launch/resume credentials, crash-recovery hooks, executable backup/restore rollback safeguards and the 60-minute system-soak definition
 - PARTIAL System Acceptance records named gameplay gates in `hem-1215-certification.json` and separate launcher/restore certificates; `scripts/verify-certification.mjs` rejects missing gates, missing WebGL Classic/Slim/legacy proof, missing restore+rollback proof, inadequate soak or an unpinned final upstream ref. This sandbox cannot produce a live PASS certificate
 - PASS production Cloudflare deployment refuses a moving browser-client branch/tag and requires `MWC_REF` to equal an exact 40-character upstream commit SHA
 

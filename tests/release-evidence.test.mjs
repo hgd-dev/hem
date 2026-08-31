@@ -28,7 +28,7 @@ test('all four finite release blockers close from matching evidence without edit
     // This is deliberately an RC -> final promotion fixture even when the real
     // source tree running the test has already been promoted to 1.0.0.
     if (!/-rc\.\d+$/.test(pkg.version)) {
-      pkg.version = '1.0.0-rc.1399'
+      pkg.version = '1.0.0-rc.1499'
       fs.writeFileSync(packagePath, `${JSON.stringify(pkg, null, 2)}\n`)
     }
     const spec = JSON.parse(fs.readFileSync(path.join(temp,'tests/system/required-gates-1215.json'),'utf8'))
@@ -37,7 +37,7 @@ test('all four finite release blockers close from matching evidence without edit
     const gates = [...spec.required, spec.soak]
     fs.writeFileSync(path.join(temp,'artifacts/hem-1215-certification.json'), JSON.stringify({
       hemVersion:pkg.version,minecraft:'1.21.5',acceptance:'passed',upstreamCommit:commit,upstreamRef:commit,upstreamPinned:true,
-      upstreamReleaseTag:'v0.1.98',upstreamRelease1215:true,upstreamLiteralVersionTokens:['1.7'],upstreamSupportedVersionsSha256:'b'.repeat(64),protocolVerified1215:true,compatibilityMode:'pinned-v0.1.98-1215-verified',
+      upstreamReleaseTag:'v0.1.98',upstreamRelease1215:true,upstreamLiteralVersionTokens:['1.7'],upstreamSupportedVersionsSha256:'b'.repeat(64),upstreamPackageSha256:'c'.repeat(64),upstreamLockSha256:'d'.repeat(64),pnpmVersion:'10.13.1',frozenLockfile:true,protocolVerified1215:true,compatibilityMode:'pinned-v0.1.98-lockfile-1215-verified',
       gates,gateCount:gates.length,requiredGateCount:gates.length,soakMinutes:60,completedAt:now
     }))
     fs.writeFileSync(path.join(temp,'artifacts/hem-launcher-certification.json'), JSON.stringify({

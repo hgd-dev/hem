@@ -204,8 +204,10 @@ try {
   if (liveBuildIdentity.upstreamReleaseTag !== 'v0.1.98' || liveBuildIdentity.upstreamRelease1215 !== true) throw new Error('Built browser client is not tied to the known v0.1.98 1.21.5 release')
   if (!Array.isArray(liveBuildIdentity.upstreamLiteralVersionTokens)) throw new Error('Built browser client is missing upstream literal-version provenance')
   if (!/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamSupportedVersionsSha256 || '')) throw new Error('Built browser client is missing upstream supportedVersions source hash')
-  if (liveBuildIdentity.compatibilityMode !== 'pinned-v0.1.98-1215-verified' || liveBuildIdentity.protocolVerified1215 !== true) throw new Error(`HEM 1.21.5 requires pinned v0.1.98 plus verified protocol/data; got ${liveBuildIdentity.compatibilityMode}`)
-  pass('client.capability-contract', `upstream feature signals + v0.1.98 provenance + verified 1.21.5 protocol/data (${liveBuildIdentity.compatibilityMode})`)
+  if (!/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamPackageSha256 || '') || !/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamLockSha256 || '')) throw new Error('Built browser client is missing frozen v0.1.98 package/lock provenance')
+  if (liveBuildIdentity.frozenLockfile !== true) throw new Error('Built browser client did not use the pinned v0.1.98 frozen lockfile')
+  if (liveBuildIdentity.compatibilityMode !== 'pinned-v0.1.98-lockfile-1215-verified' || liveBuildIdentity.protocolVerified1215 !== true) throw new Error(`HEM 1.21.5 requires pinned v0.1.98 frozen dependencies plus verified protocol/data; got ${liveBuildIdentity.compatibilityMode}`)
+  pass('client.capability-contract', `upstream feature signals + v0.1.98 frozen dependency provenance + verified 1.21.5 protocol/data (${liveBuildIdentity.compatibilityMode})`)
 
   await commandLogMatch(SHARED, 'seed', /424242/, 'Paper reports the configured shared-world seed', 10_000)
   pass('world.seed-authority', 'configured signed-64-bit/text seed transport reaches native Paper world generation authority')
@@ -2681,6 +2683,10 @@ try {
     upstreamLiteralVersionTokens: buildIdentity.upstreamLiteralVersionTokens,
     protocolVerified1215: buildIdentity.protocolVerified1215 === true,
     upstreamSupportedVersionsSha256: buildIdentity.upstreamSupportedVersionsSha256,
+    upstreamPackageSha256: buildIdentity.upstreamPackageSha256,
+    upstreamLockSha256: buildIdentity.upstreamLockSha256,
+    pnpmVersion: buildIdentity.pnpmVersion,
+    frozenLockfile: buildIdentity.frozenLockfile === true,
     compatibilityMode: buildIdentity.compatibilityMode,
     soakMinutes: SOAK_MINUTES,
     gates: [...passedGates].sort(),

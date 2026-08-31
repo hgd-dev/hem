@@ -1,4 +1,4 @@
-# HEM RC13 verification record
+# HEM RC14 verification record
 
 Date: 2026-08-30
 
@@ -6,11 +6,11 @@ Date: 2026-08-30
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **83/83 passing** source/logic/security/release-gate tests in the current RC13 local pass.
+- `npm test`: **83/83 passing** source/logic/security/release-gate tests in the current RC14 local pass.
 - `npm run verify`: **53/53 release contracts passing** across 93 source files.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
-- HEM browser build script pins `minecraft-data` 3.114.0, `minecraft-renderer` 0.1.96, `minecraft-inventory` 0.1.47, `mcraft-fun-mineflayer` 0.1.23 and `mc-assets` 0.2.83, forces the 1.21.5 version gate, enables auto-connect, records the upstream Git commit, and refuses to bundle unless the complete 1.21.5 item/block/entity registries round-trip correctly at protocol 770 and the native 1.21.5 Spring to Life item-definition layer is present.
+- HEM browser build script checks out the exact v0.1.98 release commit, preserves and hashes its checked-in `package.json` + `pnpm-lock.yaml`, installs with the upstream-declared pnpm version and `--frozen-lockfile`, forces the 1.21.5 version gate, enables auto-connect, and refuses to bundle unless the resulting installed graph resolves Minecraft 1.21.5 / protocol 770 / DataVersion 4325 with complete registry round-trips and the native Spring to Life item-definition layer.
 - Existing world safety is version-aware: RC11 parses gzip-compressed NBT `world/level.dat` and refuses to open a world with DataVersion newer than 4325, preventing an unsafe downgrade from an RC9/RC10 1.21.11 world.
 - Paper login is gated by a 90-second one-use Cloudflare launch session in production.
 - Production raw Paper ports are not published.
@@ -38,8 +38,13 @@ Those operations are encoded in CI instead of being claimed as completed.
 
 Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/system-1215.yml` certification is green for 60 minutes, the production Cloudflare R2 restore has passed, and `docs/MANUAL_ACCEPTANCE.md` is signed off. `npm run promote` is the supported transition.
 
+## RC14 frozen-dependency hotfix
+- RC14 keeps the exact v0.1.98 source commit but stops rewriting its Prismarine dependency overrides. RC13's unfrozen install could re-resolve a moving `minecraft-protocol#master` dependency while retaining an older v0.1.98 patch, which is the `ERR_PNPM_PATCH_FAILED` seen in GitHub Actions.
+- RC14 treats the v0.1.98 lockfile as release provenance: it hashes `package.json` and `pnpm-lock.yaml`, uses the package's declared pnpm version, installs with `--frozen-lockfile`, verifies neither metadata file changed, and records those hashes plus the actual installed dependency versions in `hem-build.json`.
+- Protocol/data certification remains fail-closed: after the frozen install HEM still requires Minecraft 1.21.5 / protocol 770 / DataVersion 4325, required Spring to Life registries, full item/block/entity round-trips and the 1.21.5 item-definition layer before any browser bundle can be emitted.
+
 ## RC13 upstream pin hotfix
-- RC13 pins the browser client default to upstream v0.1.98 commit `cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78`, the release containing the 1.21.5 protocol support update; CI and System Acceptance now reject moving branches/tags for acceptance.
+- RC13 pinned the browser client default to upstream v0.1.98 commit `cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78`, the release containing the 1.21.5 protocol support update; CI and System Acceptance reject moving branches/tags for acceptance.
 
 ## RC11 hardening
 - Upstream compatibility attestation: `hem-build.json` preserves the pristine historical `supportedVersions.mjs` SHA-256 and literal version tokens for provenance, records the v0.1.98 release identity, and only certifies after the installed HEM protocol/data stack resolves Minecraft 1.21.5 / protocol 770 / DataVersion 4325 with the required registries. Historical literal tokens are not misused as a complete support list.
@@ -61,7 +66,7 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - Backward-safe Hardcore D1 persistence plus real SQLite migration tests.
 - Unit-tested Paper server.properties generation and owner-only Edit World / rename flow.
 - Final-certification guard: `HEM_REQUIRE_PINNED_MWC=true` rejects branch/tag refs, System Acceptance can require the exact SHA, and production Cloudflare deployment always requires an exact upstream commit ref equal to the resolved commit.
-- Client build pins and validates `mc-assets` 0.2.83's native 1.21.5 item-definition layer for Mace, Wind Charge and Spring to Life items, while keeping live rendering parity as an acceptance requirement rather than a paper claim.
+- Client build validates the frozen upstream `mc-assets` dependency's native 1.21.5 item-definition layer for Mace, Wind Charge and Spring to Life items, while keeping live rendering parity as an acceptance requirement rather than a paper claim.
 
 ## RC11 parity expansion
 

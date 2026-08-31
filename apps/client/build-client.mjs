@@ -64,15 +64,20 @@ const missingCapabilities = Object.entries(capabilities).filter(([, present]) =>
 if (missingCapabilities.length) throw new Error(`HEM upstream capability contract missing: ${missingCapabilities.join(', ')}`)
 
 const pkgPath = path.join(upstream, 'package.json')
-const pkg = JSON.parse(await fsp.readFile(pkgPath, 'utf8'))
-pkg.pnpm ??= {}
-pkg.pnpm.overrides ??= {}
-pkg.pnpm.overrides['minecraft-data'] = '3.114.0'
-pkg.pnpm.overrides['minecraft-renderer'] = '0.1.96'
-pkg.pnpm.overrides['minecraft-inventory'] = '0.1.47'
-pkg.pnpm.overrides['mcraft-fun-mineflayer'] = '0.1.23'
-pkg.pnpm.overrides['mc-assets'] = '0.2.83'
-await fsp.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
+const lockPath = path.join(upstream, 'pnpm-lock.yaml')
+const pkgSource = await fsp.readFile(pkgPath, 'utf8')
+const lockSource = await fsp.readFile(lockPath, 'utf8')
+const pkg = JSON.parse(pkgSource)
+const upstreamPackageSha256 = createHash('sha256').update(pkgSource).digest('hex')
+const upstreamLockSha256 = createHash('sha256').update(lockSource).digest('hex')
+
+// IMPORTANT: do not rewrite dependency overrides for this historical release.
+// RC13 used an unfrozen install after injecting newer Prismarine versions. That
+// caused pnpm to re-resolve minecraft-protocol#master to a 2026 commit while the
+// v0.1.98 patch still targeted its original 2025 snapshot, producing
+// ERR_PNPM_PATCH_FAILED. The release's checked-in lockfile is part of the pinned
+// build provenance and must stay authoritative.
+if (!/minecraft-protocol/.test(lockSource)) throw new Error('Pinned v0.1.98 lockfile no longer contains minecraft-protocol; review HEM build provenance')
 
 // HEM intentionally exposes one protocol target. Historical minecraft-web-client
 // releases derive their supported-version surface dynamically, so grepping literal
@@ -96,8 +101,17 @@ console.log(`HEM upstream provenance: ${upstreamReleaseTag || 'unrecognized exac
 // below is the authoritative protocol/data check for the patched HEM integration.
 await fsp.writeFile(supportedVersions, "export default ['1.21.5']\n")
 
-const pnpm = args => run('npx', ['--yes', 'pnpm@10.32.1', ...args], upstream)
-pnpm(['install', '--no-frozen-lockfile'])
+const pnpmVersion = /^pnpm@(\d+\.\d+\.\d+)$/.exec(pkg.packageManager || '')?.[1] || '10.32.1'
+const pnpm = args => run('npx', ['--yes', `pnpm@${pnpmVersion}`, ...args], upstream)
+process.env.CYPRESS_INSTALL_BINARY ??= '0'
+pnpm(['install', '--frozen-lockfile'])
+
+// A frozen install is only useful if nothing rewrote the lock/package metadata.
+// Re-hash both files immediately after install so dependency drift fails closed.
+const installedPackageSha256 = createHash('sha256').update(await fsp.readFile(pkgPath)).digest('hex')
+const installedLockSha256 = createHash('sha256').update(await fsp.readFile(lockPath)).digest('hex')
+if (installedPackageSha256 !== upstreamPackageSha256) throw new Error('Pinned upstream package.json changed during dependency install')
+if (installedLockSha256 !== upstreamLockSha256) throw new Error('Pinned upstream pnpm-lock.yaml changed during dependency install')
 
 // Fail the build before bundling if the installed protocol/data stack is not truly
 // 1.21.5-aware. This does not prove renderer parity, but it prevents an older
@@ -129,9 +143,8 @@ if (mcData.version?.version !== 770) throw new Error('HEM 1.21.5 protocol id res
 if (mcData.version?.dataVersion != null && mcData.version.dataVersion !== 4325) throw new Error('HEM 1.21.5 data version resolved to ' + mcData.version.dataVersion + ', expected 4325')
 
 const assetsPackage = require('mc-assets/package.json')
-if (assetsPackage.version !== '0.2.83') throw new Error('HEM mc-assets resolved to ' + assetsPackage.version + ', expected 0.2.83')
 const itemDefinitions = require('mc-assets/dist/itemDefinitions.json')
-if (!Object.prototype.hasOwnProperty.call(itemDefinitions, '1.21.5')) throw new Error('HEM mc-assets does not advertise a 1.21.5 item-definition layer')
+if (!Object.prototype.hasOwnProperty.call(itemDefinitions, '1.21.5')) throw new Error('Pinned v0.1.98 mc-assets does not advertise a 1.21.5 item-definition layer')
 for (const name of ['mace','wind_charge','brown_egg','blue_egg','firefly_bush','leaf_litter','wildflowers','bush','short_dry_grass','tall_dry_grass','cactus_flower']) {
   if (!itemDefinitions.latest?.[name]) throw new Error('HEM mc-assets missing 1.21.5-era item definition: ' + name)
 }
@@ -140,13 +153,24 @@ if (spawnEggs.length < 50) throw new Error('HEM 1.21.5 spawn-egg registry unexpe
 for (const name of spawnEggs) {
   if (!itemDefinitions.latest?.[name]) throw new Error('HEM mc-assets missing native 1.21.5 spawn-egg item definition: ' + name)
 }
-console.log('HEM 1.21.5 data + item-definition check passed', mcData.version.minecraftVersion, 'protocol', mcData.version.version, 'mc-assets', assetsPackage.version)
+const versions = {
+  minecraftData: require('minecraft-data/package.json').version,
+  minecraftRenderer: require('minecraft-renderer/package.json').version,
+  minecraftInventory: require('minecraft-inventory/package.json').version,
+  mineflayerConnector: require('mcraft-fun-mineflayer/package.json').version,
+  mcAssets: assetsPackage.version,
+}
+console.log('HEM 1.21.5 data + item-definition check passed', mcData.version.minecraftVersion, 'protocol', mcData.version.version, versions)
+require('fs').writeFileSync('.hem-dependency-versions.json', JSON.stringify(versions))
 `)
 run('node', [dataCheck], upstream)
+const dependencyVersionsPath = path.join(upstream, '.hem-dependency-versions.json')
+const dependencyVersions = JSON.parse(await fsp.readFile(dependencyVersionsPath, 'utf8'))
 const protocolVerified1215 = true
-const compatibilityMode = upstreamRelease1215 ? 'pinned-v0.1.98-1215-verified' : 'pinned-1215-data-verified'
+const compatibilityMode = upstreamRelease1215 ? 'pinned-v0.1.98-lockfile-1215-verified' : 'pinned-lockfile-1215-data-verified'
 console.log(`HEM client compatibility mode: ${compatibilityMode}; protocol/data verification passed`)
 await fsp.rm(dataCheck, { force: true })
+await fsp.rm(dependencyVersionsPath, { force: true })
 
 pnpm(['prepare-project'])
 pnpm(['build'])
@@ -176,7 +200,7 @@ delete config.defaultProxy
 await fsp.writeFile(configPath, JSON.stringify(config, null, 2) + '\n')
 
 await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
-  hemVersion: '1.0.0-rc.13',
+  hemVersion: '1.0.0-rc.14',
   minecraft: '1.21.5',
   upstreamRepo: repo,
   upstreamRef: ref,
@@ -186,13 +210,13 @@ await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
   upstreamRelease1215,
   upstreamLiteralVersionTokens,
   upstreamSupportedVersionsSha256,
+  upstreamPackageSha256,
+  upstreamLockSha256,
+  pnpmVersion,
+  frozenLockfile: true,
   protocolVerified1215,
   compatibilityMode,
-  minecraftData: '3.114.0',
-  minecraftRenderer: '0.1.96',
-  minecraftInventory: '0.1.47',
-  mineflayerConnector: '0.1.23',
-  mcAssets: '0.2.83',
+  ...dependencyVersions,
   capabilities,
   builtAt: new Date().toISOString(),
 }, null, 2) + '\n')

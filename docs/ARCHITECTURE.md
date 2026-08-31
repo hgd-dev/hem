@@ -63,15 +63,14 @@ Both use exactly the same Paper 1.21.5 path.
 
 ## Browser compatibility layer
 
-The browser client is built reproducibly from the exact `zardoy/minecraft-web-client` v0.1.98 release commit `cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78`, the upstream release whose notes include the 1.21.5 protocol-support update. HEM patches:
+The browser client is built reproducibly from the exact `zardoy/minecraft-web-client` v0.1.98 release commit `cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78`, the upstream release whose notes include the 1.21.5 protocol-support update. HEM preserves that release's checked-in `package.json` + `pnpm-lock.yaml`, installs them with the upstream-declared pnpm version and `--frozen-lockfile`, then verifies the installed graph resolves Minecraft 1.21.5 / protocol 770 / DataVersion 4325 before bundling. HEM patches only the client integration surface:
 
-- `minecraft-data` override → `3.114.0`;
 - the exposed supported-version list → only `1.21.5`;
 - `allowAutoConnect` → true in the built config;
 - HEM title;
 - HEM one-use authorization bridge.
 
-The build records the exact upstream Git commit in `hem-build.json`.
+The build records the exact upstream Git commit, package/lock SHA-256 hashes, pnpm version and resolved dependency versions in `hem-build.json`.
 
 This patch deliberately does **not** claim that the upstream renderer already has perfect 1.21.5 visual coverage. The real two-browser workflow is the compatibility gate.
 

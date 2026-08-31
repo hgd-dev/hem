@@ -12,7 +12,7 @@ HEM is an integration project. This source package does not vendor the upstream 
 
 ## PrismarineJS ecosystem
 
-The browser client depends on Mineflayer, minecraft-protocol, minecraft-data and related Prismarine libraries through its upstream dependency graph. HEM specifically overrides `minecraft-data` to 3.114.0 for its 1.21.5 candidate build.
+The browser client depends on Mineflayer, minecraft-protocol, minecraft-data and related Prismarine libraries through its upstream dependency graph. HEM preserves the exact dependency graph checked into the pinned v0.1.98 release and installs it with `--frozen-lockfile`; the resolved package versions and package/lock SHA-256 hashes are recorded in `hem-build.json`. HEM then rejects the build unless the installed graph resolves Minecraft 1.21.5 / protocol 770 and the required 1.21.5 registries/assets.
 
 ## Paper
 
