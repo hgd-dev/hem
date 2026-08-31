@@ -814,3 +814,16 @@ test('RC16 orchestrator image sources Java 21 from a real JRE image instead of B
   assert.match(d,/java -version/)
   assert.doesNotMatch(d,/apt-get install[^\n]*openjdk-21-jre-headless/)
 })
+
+
+test('RC17 proxy dependency stage provides git without shipping it in the runtime image',()=>{
+  const d=read('apps/proxy/Dockerfile')
+  assert.ok(d.includes('FROM node:22-bookworm-slim AS deps'))
+  assert.ok(d.includes('apt-get install -y --no-install-recommends git ca-certificates'))
+  assert.ok(d.includes('RUN npm install --omit=dev'))
+  assert.ok(d.includes('COPY --from=deps /app/node_modules ./node_modules'))
+  const runtimeMarker='FROM node:22-bookworm-slim\nWORKDIR /app\nCOPY --from=deps /app/node_modules ./node_modules'
+  assert.ok(d.includes(runtimeMarker),'proxy runtime must copy preinstalled production dependencies from deps stage')
+  const runtime=d.slice(d.indexOf(runtimeMarker))
+  assert.doesNotMatch(runtime,/apt-get install[^\n]*git/)
+})

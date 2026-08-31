@@ -28,7 +28,7 @@ test('all four finite release blockers close from matching evidence without edit
     // This is deliberately an RC -> final promotion fixture even when the real
     // source tree running the test has already been promoted to 1.0.0.
     if (!/-rc\.\d+$/.test(pkg.version)) {
-      pkg.version = '1.0.0-rc.1699'
+      pkg.version = '1.0.0-rc.1799'
       fs.writeFileSync(packagePath, `${JSON.stringify(pkg, null, 2)}\n`)
     }
     const spec = JSON.parse(fs.readFileSync(path.join(temp,'tests/system/required-gates-1215.json'),'utf8'))
