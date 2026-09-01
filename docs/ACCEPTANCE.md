@@ -14,7 +14,7 @@ It builds the real browser client and launches an isolated test stack containing
 - HEMGate;
 - HEM orchestrator;
 - HEM WebSocket→TCP proxy;
-- test-only launch-token service;
+- test-only launch-token service plus a dedicated HTTPS custom-skin origin;
 - two independent headless Chromium browser contexts.
 
 The workflow verifies:
@@ -24,8 +24,8 @@ The workflow verifies:
 3. Paper 1.21.5 reaches ready state for a real shared HEM world.
 4. Hudson and Elise each connect from independent Chromium contexts through the real WebSocket→TCP proxy.
 5. HEMGate authenticates both one-use launch sessions and Paper reports two players.
-6. Both clients load protocol 770 / 1.21.5 registries and live rendered chunk-section meshes; `hem-build.json` must attest the deterministic `hem-prismarine-chunk-1215-nosize-v5` block/biome no-size-prefix decoder patch before the renderer gate can pass.
-7. Each browser fetches the other player’s distinct custom HEM skin after post-auth profile re-announcement.
+6. Both clients load protocol 770 / 1.21.5 registries and live rendered chunk-section meshes; `hem-build.json` must attest the deterministic `hem-prismarine-chunk-1215-nosize-v5` block/biome no-size-prefix decoder patch and the generated `/sounds.js` byte-count/SHA-256 before the renderer/capability gate can pass.
+7. Each browser fetches the other player’s distinct custom HEM skin over the system HTTPS skin origin after post-auth profile re-announcement.
 8. A normal browser refresh reauthorizes through a rotated five-minute one-use `hem:session` lease without reusing the original launch token or putting secrets in the URL.
 9. The Docker proxy is actually stopped; both clients disconnect and Paper presence reaches zero. After restart, the same tabs recover only through fresh resume leases.
 10. Elise sees Hudson as a remote entity, receives horizontal movement, and sees a browser-origin jump.

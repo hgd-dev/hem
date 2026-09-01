@@ -1,5 +1,6 @@
 import { chromium } from 'playwright'
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
@@ -145,7 +146,7 @@ async function itemCount(page, itemName) {
 }
 
 async function openPlayer(browser, port, user, token, fatal, label) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 720 } })
+  const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, ignoreHTTPSErrors: true })
   const page = await context.newPage()
   const skinFetches = new Set()
   page.on('pageerror', error => fatal.push(`${label} pageerror: ${error.message}`))
@@ -154,7 +155,9 @@ async function openPlayer(browser, port, user, token, fatal, label) {
   })
   page.on('requestfailed', request => {
     const url = request.url()
-    if (url.startsWith('http://127.0.0.1:4173/')) console.log(`${label} client request failed: ${url} :: ${request.failure()?.errorText || 'unknown'}`)
+    if (url.startsWith('http://127.0.0.1:4173/') || /\/skins\/(?:hudson|elise)\.png(?:[?#]|$)/i.test(url)) {
+      console.log(`${label} client request failed: ${url} :: ${request.failure()?.errorText || 'unknown'}`)
+    }
   })
   page.on('response', async response => {
     const url = response.url()
@@ -225,11 +228,20 @@ try {
   if (!/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamPackageSha256 || '') || !/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamLockSha256 || '')) throw new Error('Built browser client is missing frozen v0.1.99 package/lock provenance')
   if (liveBuildIdentity.frozenLockfile !== true) throw new Error('Built browser client did not use the pinned v0.1.99 frozen lockfile')
   if (liveBuildIdentity.compatibilityMode !== 'pinned-v0.1.99-lockfile-1215-verified' || liveBuildIdentity.protocolVerified1215 !== true) throw new Error(`HEM 1.21.5 requires pinned v0.1.99 frozen dependencies plus verified protocol/data; got ${liveBuildIdentity.compatibilityMode}`)
+  const soundMapBytes = await fs.readFile('apps/client/dist/sounds.js')
+  const soundMapSha256 = createHash('sha256').update(soundMapBytes).digest('hex')
+  if (liveBuildIdentity.soundMap?.path !== '/sounds.js' || liveBuildIdentity.soundMap?.bytes !== soundMapBytes.length || liveBuildIdentity.soundMap?.sha256 !== soundMapSha256) throw new Error('Built browser client is missing the generated /sounds.js provenance attestation')
+  const liveSoundAsset = await hudson.page.evaluate(async () => {
+    const response = await fetch('/sounds.js', { cache: 'no-store' })
+    const body = await response.arrayBuffer()
+    return { ok: response.ok, status: response.status, contentType: response.headers.get('content-type') || '', bytes: body.byteLength }
+  })
+  if (!liveSoundAsset.ok || !/javascript/i.test(liveSoundAsset.contentType) || liveSoundAsset.bytes !== liveBuildIdentity.soundMap.bytes) throw new Error(`HEM /sounds.js live asset mismatch: ${JSON.stringify(liveSoundAsset)}`)
   if (liveBuildIdentity.prismarineChunkPatch?.patchId !== 'hem-prismarine-chunk-1215-nosize-v5' || liveBuildIdentity.prismarineChunkPatch?.reports?.length < 1) throw new Error('HEM 1.21.5 requires the deterministic prismarine-chunk no-size-prefix decoder patch')
   if (!liveBuildIdentity.prismarineChunkPatch.reports.every(report => report.sizing?.blocks5Bits === 342 && report.sizing?.biomes3Bits === 4)) throw new Error('HEM 1.21.5 chunk patch sizing attestation is invalid')
   if (!liveBuildIdentity.prismarineChunkPatch.reports.every(report => report.decoderPaths?.readBufferMethods >= 1 && report.decoderPaths?.computedReadPaths === report.decoderPaths?.readBufferMethods)) throw new Error('HEM 1.21.5 chunk patch decoder-path attestation is invalid')
   if (!liveBuildIdentity.prismarineChunkPatch.reports.every(report => report.runtimeResolved === true && Array.isArray(report.consumers) && report.consumers.length >= 1)) throw new Error('HEM 1.21.5 chunk patch is not tied to runtime-resolved consumers')
-  pass('client.capability-contract', `upstream feature signals + v0.1.99 frozen dependency provenance + verified 1.21.5 protocol/data + chunk no-size-prefix patch (${liveBuildIdentity.compatibilityMode})`)
+  pass('client.capability-contract', `upstream feature signals + generated sound map + v0.1.99 frozen dependency provenance + verified 1.21.5 protocol/data + chunk no-size-prefix patch (${liveBuildIdentity.compatibilityMode})`)
 
   await commandLogMatch(SHARED, 'seed', /424242/, 'Paper reports the configured shared-world seed', 10_000)
   pass('world.seed-authority', 'configured signed-64-bit/text seed transport reaches native Paper world generation authority')
@@ -2710,6 +2722,7 @@ try {
     pnpmVersion: buildIdentity.pnpmVersion,
     frozenLockfile: buildIdentity.frozenLockfile === true,
     prismarineChunkPatch: buildIdentity.prismarineChunkPatch,
+    soundMap: buildIdentity.soundMap,
     compatibilityMode: buildIdentity.compatibilityMode,
     soakMinutes: SOAK_MINUTES,
     gates: [...passedGates].sort(),

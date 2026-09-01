@@ -28,7 +28,7 @@ test('all four finite release blockers close from matching evidence without edit
     // This is deliberately an RC -> final promotion fixture even when the real
     // source tree running the test has already been promoted to 1.0.0.
     if (!/-rc\.\d+$/.test(pkg.version)) {
-      pkg.version = '1.0.0-rc.2699'
+      pkg.version = '1.0.0-rc.2799'
       fs.writeFileSync(packagePath, `${JSON.stringify(pkg, null, 2)}\n`)
     }
     const spec = JSON.parse(fs.readFileSync(path.join(temp,'tests/system/required-gates-1215.json'),'utf8'))
@@ -39,6 +39,7 @@ test('all four finite release blockers close from matching evidence without edit
       hemVersion:pkg.version,minecraft:'1.21.5',acceptance:'passed',upstreamCommit:commit,upstreamRef:commit,upstreamPinned:true,
       upstreamReleaseTag:'v0.1.99',upstreamRelease1215:true,upstreamLiteralVersionTokens:['1.7'],upstreamSupportedVersionsSha256:'b'.repeat(64),upstreamPackageSha256:'c'.repeat(64),upstreamLockSha256:'d'.repeat(64),pnpmVersion:'10.13.1',frozenLockfile:true,protocolVerified1215:true,compatibilityMode:'pinned-v0.1.99-lockfile-1215-verified',
       prismarineChunkPatch:{patchId:'hem-prismarine-chunk-1215-nosize-v5',reports:[{packageVersion:'1.40.0',sizing:{blocks5Bits:342,biomes3Bits:4},decoderPaths:{readBufferMethods:1,computedReadPaths:1},runtimeResolved:true,consumers:['minecraft-web-client']}]},
+      soundMap:{path:'/sounds.js',sha256:'e'.repeat(64),bytes:4096},
       gates,gateCount:gates.length,requiredGateCount:gates.length,soakMinutes:60,completedAt:now
     }))
     fs.writeFileSync(path.join(temp,'artifacts/hem-launcher-certification.json'), JSON.stringify({

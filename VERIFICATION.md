@@ -1,4 +1,4 @@
-# HEM RC26 verification record
+# HEM RC27 verification record
 
 Date: 2026-09-01
 
@@ -6,8 +6,8 @@ Date: 2026-09-01
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **97/97 passing** source/logic/security/release-gate tests in the current RC26 local pass.
-- `npm run verify`: **55/55 release contracts passing**.
+- `npm test`: **99/99 passing** source/logic/security/release-gate tests in the current RC27 local pass.
+- `npm run verify`: **56/56 release contracts passing**.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
 - HEM browser build script checks out the exact v0.1.99 stable-release commit `0359f20b8d721ea44c7ddb633c985a71574c73d3`, preserves and hashes its checked-in `package.json` + `pnpm-lock.yaml`, installs with the upstream-declared pnpm version and `--frozen-lockfile`, forces the 1.21.5 version gate, enables auto-connect, and refuses to bundle unless the resulting installed graph resolves Minecraft 1.21.5 / protocol 770 / DataVersion 4325 with complete registry round-trips and the native Spring to Life item-definition layer.
@@ -99,6 +99,14 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - Release contracts require both the persistent drag counter and the before/after Playwright assertion, preventing regression back to the false-negative signal.
 
 
+
+
+## RC27 generated sound-map + HTTPS remote-skin acceptance repair
+
+- The RC26 live workflow proved the 1.21.5 chunk decoder path had advanced far enough for Paper to become ready and both browser players to launch. The next failures were concrete presentation-network prerequisites: `/sounds.js` returned HTTP 404 and the custom skin loader hit `ERR_SSL_PROTOCOL_ERROR`, so the reciprocal remote-skin gate timed out.
+- RC27 mirrors upstream's production Docker option by running the pinned v0.1.99 `scripts/downloadSoundsMap.mjs` after the frozen install, requires a non-empty generated `sounds.js`, preserves it at `/sounds.js` even if the historical bundler does not copy it automatically, and records source path/byte count/SHA-256 in `hem-build.json`. System Acceptance re-hashes the built file and fetches `/sounds.js` through the live browser origin before accepting the capability contract.
+- RC27 moves the system-only custom-skin origin to HTTPS on `127.0.0.1:9443` with a committed test-only self-signed certificate containing the localhost/IP SAN. The browser context enables `ignoreHTTPSErrors` only for this controlled test certificate; the auth API remains internal HTTP on port 9090. The two-player renderer gate still requires successful HTTP responses for the other player's distinct PNG, so the skin behavior is not mocked.
+- The production client config explicitly keeps `skinTexturesProxy` empty. Certification, doctor and Cloudflare deployment identity checks now also require generated `/sounds.js` provenance.
 
 ## RC26 historical readBuffer source-shape correction
 

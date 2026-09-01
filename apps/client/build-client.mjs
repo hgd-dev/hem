@@ -20,6 +20,21 @@ const run = (cmd, args, cwd = here) => {
   execFileSync(cmd, args, { cwd, stdio: 'inherit', env: process.env })
 }
 
+async function findGeneratedSoundMap(root) {
+  const matches = []
+  async function walk(dir) {
+    for (const entry of await fsp.readdir(dir, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist') continue
+      const target = path.join(dir, entry.name)
+      if (entry.isDirectory()) await walk(target)
+      else if (entry.name === 'sounds.js') matches.push(target)
+    }
+  }
+  await walk(root)
+  matches.sort((a, b) => path.relative(root, a).length - path.relative(root, b).length || a.localeCompare(b))
+  return matches[0] || null
+}
+
 await fsp.rm(upstream, { recursive: true, force: true })
 await fsp.rm(dist, { recursive: true, force: true })
 run('git', ['clone', '--filter=blob:none', '--no-checkout', repo, upstream])
@@ -217,11 +232,36 @@ console.log(`HEM client compatibility mode: ${compatibilityMode}; protocol/data 
 await fsp.rm(dataCheck, { force: true })
 await fsp.rm(dependencyVersionsPath, { force: true })
 
+// v0.1.99's production Dockerfile makes the sound-map download an explicit build
+// step. HEM exercises the client's sound loader during live acceptance, so a build
+// without the generated /sounds.js is incomplete and must fail here rather than as
+// a browser 404 later. This downloads only upstream's generated sound metadata; HEM
+// still does not vendor Mojang audio assets in its source tree.
+const soundMapScript = path.join(upstream, 'scripts', 'downloadSoundsMap.mjs')
+if (!fs.existsSync(soundMapScript)) throw new Error('Pinned v0.1.99 no longer exposes scripts/downloadSoundsMap.mjs; review HEM sound-map build integration')
+run('node', [soundMapScript], upstream)
+const generatedSoundMap = await findGeneratedSoundMap(upstream)
+if (!generatedSoundMap) throw new Error('Pinned v0.1.99 sound-map step completed without generating sounds.js')
+const generatedSoundMapSource = path.relative(upstream, generatedSoundMap).split(path.sep).join('/')
+const generatedSoundMapBytes = await fsp.readFile(generatedSoundMap)
+if (generatedSoundMapBytes.length < 32) throw new Error(`Pinned v0.1.99 generated sounds.js is unexpectedly small (${generatedSoundMapBytes.length} bytes)`)
+const generatedSoundMapSha256 = createHash('sha256').update(generatedSoundMapBytes).digest('hex')
+console.log(`HEM sound map generated at ${generatedSoundMapSource} (${generatedSoundMapBytes.length} bytes, sha256 ${generatedSoundMapSha256})`)
+
 pnpm(['prepare-project'])
 pnpm(['build'])
 
 const built = path.join(upstream, 'dist')
 if (!fs.existsSync(path.join(built, 'index.html'))) throw new Error('minecraft-web-client build did not create dist/index.html')
+const builtSoundMap = path.join(built, 'sounds.js')
+if (!fs.existsSync(builtSoundMap)) {
+  // Historical bundler layouts do not all copy root/public generated files the
+  // same way. Preserve the exact generated sound map at the URL the client requests.
+  await fsp.copyFile(generatedSoundMap, builtSoundMap)
+}
+const builtSoundMapBytes = await fsp.readFile(builtSoundMap)
+const builtSoundMapSha256 = createHash('sha256').update(builtSoundMapBytes).digest('hex')
+if (builtSoundMapSha256 !== generatedSoundMapSha256) throw new Error('Built /sounds.js differs from the generated pinned-upstream sound map')
 await fsp.cp(built, dist, { recursive: true })
 await fsp.copyFile(path.join(here, 'hem-bridge.js'), path.join(dist, 'hem-bridge.js'))
 
@@ -241,11 +281,12 @@ config.rightSideText = 'HEM — Hudson · Elise · Minecraft'
 config.splashText = '1.21.5'
 config.splashTextFallback = 'HEM 1.21.5'
 config.defaultUsername = 'HEMPlayer'
+config.skinTexturesProxy = ''
 delete config.defaultProxy
 await fsp.writeFile(configPath, JSON.stringify(config, null, 2) + '\n')
 
 await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
-  hemVersion: '1.0.0-rc.26',
+  hemVersion: '1.0.0-rc.27',
   minecraft: '1.21.5',
   upstreamRepo: repo,
   upstreamRef: ref,
@@ -259,6 +300,7 @@ await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
   upstreamLockSha256,
   pnpmVersion,
   frozenLockfile: true,
+  soundMap: { source: generatedSoundMapSource, sha256: generatedSoundMapSha256, bytes: generatedSoundMapBytes.length, path: '/sounds.js' },
   prismarineChunkPatch,
   protocolVerified1215,
   compatibilityMode,

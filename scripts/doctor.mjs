@@ -59,7 +59,7 @@ if (fs.existsSync(clientIdentityPath)) {
       identity.upstreamReleaseTag === 'v0.1.99' && identity.upstreamRelease1215 === true &&
       Array.isArray(identity.upstreamLiteralVersionTokens) &&
       /^[0-9a-f]{64}$/i.test(identity.upstreamSupportedVersionsSha256 || '') &&
-      identity.compatibilityMode === 'pinned-v0.1.99-lockfile-1215-verified' && identity.protocolVerified1215 === true && identity.frozenLockfile === true && /^[0-9a-f]{64}$/i.test(identity.upstreamLockSha256 || '')
+      identity.compatibilityMode === 'pinned-v0.1.99-lockfile-1215-verified' && identity.protocolVerified1215 === true && identity.frozenLockfile === true && /^[0-9a-f]{64}$/i.test(identity.upstreamLockSha256 || '') && identity.soundMap?.path === '/sounds.js' && /^[0-9a-f]{64}$/i.test(identity.soundMap?.sha256 || '') && identity.soundMap?.bytes >= 32
     add('client.identity', ok, ok ? `${identity.compatibilityMode} @ ${identity.upstreamCommit}` : 'hem-build.json is incomplete or for another HEM version', systemMode)
   } catch (error) {
     add('client.identity', false, `invalid hem-build.json: ${error.message}`, systemMode)

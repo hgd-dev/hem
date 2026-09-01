@@ -5,11 +5,13 @@ services:
     command: ["node","tests/system/auth-stub.mjs"]
     environment:
       SERVER_SERVICE_KEY: system-server-key-0123456789abcdef
-      PUBLIC_SKIN_ORIGIN: http://127.0.0.1:9090
+      PUBLIC_SKIN_ORIGIN: https://127.0.0.1:9443
+      SKIN_PORT: "9443"
     volumes:
       - ../..:/repo:ro
     ports:
       - "127.0.0.1:9090:9090"
+      - "127.0.0.1:9443:9443"
     networks: [hemtest]
 
   orchestrator:
