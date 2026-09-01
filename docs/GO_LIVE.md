@@ -1,4 +1,4 @@
-# HEM RC18 — go live
+# HEM RC19 — go live
 
 This is the shortest safe path from the source ZIP to a playable public HEM deployment.
 

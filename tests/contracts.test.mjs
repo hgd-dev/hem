@@ -829,3 +829,14 @@ test('RC17 proxy dependency stage provides git without shipping it in the runtim
   const runtime=d.slice(d.indexOf(runtimeMarker))
   assert.doesNotMatch(runtime,/apt-get install[^\n]*git/)
 })
+
+
+test('RC19 orchestrator runtime image ships every local module imported by server.mjs',()=>{
+  const server=read('apps/orchestrator/server.mjs')
+  const docker=read('apps/orchestrator/Dockerfile')
+  const imports=[...server.matchAll(/from ['\"](\.\/[^'\"]+)['\"]/g)].map(m=>m[1].replace(/^\.\//,''))
+  assert.deepEqual(new Set(imports),new Set(['world-config.mjs','world-version.mjs']))
+  for(const file of imports){
+    assert.ok(docker.includes(`COPY apps/orchestrator/${file} ./${file}`),`orchestrator image does not copy imported runtime module ${file}`)
+  }
+})

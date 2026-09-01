@@ -45,6 +45,7 @@ const parityLedger=fs.readFileSync(path.join(root,'docs/PARITY_1_21_5.md'),'utf8
 const workflow1215=fs.readFileSync(path.join(root,'.github/workflows/system-1215.yml'),'utf8')
 const systemCompose=fs.readFileSync(path.join(root,'tests/system/docker-compose.yml'),'utf8')
 const checks=[
+  ['orchestrator image includes imported runtime modules',/COPY apps\/orchestrator\/world-config\.mjs \.\/world-config\.mjs/.test(fs.readFileSync(path.join(root,'apps/orchestrator/Dockerfile'),'utf8'))&&/COPY apps\/orchestrator\/world-version\.mjs \.\/world-version\.mjs/.test(fs.readFileSync(path.join(root,'apps/orchestrator/Dockerfile'),'utf8'))],
   ['Paper 1.21.5 build 114 authority',/1\.21\.5/.test(orch)&&/PAPER_BUILD[^\n]+114/.test(orch)&&/2ae6ae22adf417699746e0f89fc2ef6cb6ee050a5f6608cee58f0535d60b509e/.test(orch)],['one world per Paper dir',/path\.join\(ROOT,id\)/.test(orch)],
   ['launch token one-use',/consumed_at IS NULL/.test(hub)&&/UPDATE launch_sessions SET consumed_at/.test(hub)],
   ['membership gate',/requireMembership/.test(hub)],['client 1.21.5 target',/supportedVersions\.mjs/.test(client)&&/1\.21\.5/.test(client)&&/minecraftRenderer: dependencyVersion\('minecraft-renderer'/.test(client)&&/minecraftInventory: dependencyVersion\('minecraft-inventory'/.test(client)&&/mineflayerConnector: dependencyVersion\('mcraft-fun-mineflayer'/.test(client)&&/--frozen-lockfile/.test(client)],

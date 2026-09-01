@@ -1,5 +1,5 @@
 {
-  "name":"@hem/proxy","private":true,"version":"1.0.0-rc.18","type":"commonjs",
+  "name":"@hem/proxy","private":true,"version":"1.0.0-rc.19","type":"commonjs",
   "dependencies":{"compression":"^1.7.5","cors":"^2.8.5","express":"^4.21.2","net-browserify":"github:zardoy/prismarinejs-net-browserify"},
   "scripts":{"start":"node server.cjs"}
 }

@@ -1,4 +1,4 @@
-# HEM RC18 verification record
+# HEM RC19 verification record
 
 Date: 2026-08-31
 
@@ -6,8 +6,8 @@ Date: 2026-08-31
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **85/85 passing** source/logic/security/release-gate tests in the current RC18 local pass.
-- `npm run verify`: **53/53 release contracts passing** across 93 source files.
+- `npm test`: **86/86 passing** source/logic/security/release-gate tests in the current RC19 local pass.
+- `npm run verify`: **54/54 release contracts passing** across 93 source files.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
 - HEM browser build script checks out the exact v0.1.98 release commit, preserves and hashes its checked-in `package.json` + `pnpm-lock.yaml`, installs with the upstream-declared pnpm version and `--frozen-lockfile`, forces the 1.21.5 version gate, enables auto-connect, and refuses to bundle unless the resulting installed graph resolves Minecraft 1.21.5 / protocol 770 / DataVersion 4325 with complete registry round-trips and the native Spring to Life item-definition layer.
@@ -57,7 +57,7 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - Expanded two-browser gates for normal keyboard movement, block placement, jump/fall damage, hunger/death/respawn, armor/offhand, 3×3 crafting, barrel/ender-chest isolation, repeaters/redstone dust, time/weather/difficulty, world border, native portal entry and representative entity families.
 - Deterministic Docker+rclone-local cold-backup restore/rollback drill; this proves recovery logic while leaving real Cloudflare R2 transport as a separate final manual requirement.
 - `npm run parity` reports the machine-parsed ledger; `npm run release:guard` uses the finite `docs/RELEASE_BLOCKERS.md` promotion list rather than requiring every compatibility-roadmap row to be PASS, while still requiring pinned 60-minute certification for final 1.0.0.
-- 85/85 local tests and 53/53 release contracts.
+- 86/86 local tests and 54/54 release contracts.
 - Browser refresh recovery via a five-minute rotating one-use in-memory resume lease delivered over `hem:session`; the original launch token remains one-use and URL-fragment-only.
 - Post-auth skin profile re-announcement plus reciprocal two-browser custom-texture fetch assertions.
 - Test-only forced Paper crash endpoint, gated by `HEM_ENABLE_TEST_FAULTS`, with world/player persistence recovery assertions.
@@ -97,3 +97,9 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - The 3D preview already set `__hemPreviewDragged = true` during pointer movement, but the normal click-suppression handler deliberately reset that transient flag after mouse-up so a drag would not open the PNG picker. The acceptance test read the transient flag after release and therefore produced a false negative even when rotation input had executed.
 - RC18 adds a persistent per-canvas `__hemPreviewDragCount` that increments once for each real pointer drag while keeping the transient click-suppression flag unchanged. The Playwright gate now records the counter before and after an actual `page.mouse` drag and requires it to increase, so drag rotation remains mandatory without racing the click cleanup path.
 - Release contracts require both the persistent drag counter and the before/after Playwright assertion, preventing regression back to the false-negative signal.
+
+
+## RC19 orchestrator runtime-module packaging hotfix
+
+- RC18 reached the live system stack but the orchestrator container exited before binding port 3000. `apps/orchestrator/server.mjs` imports `world-config.mjs` and `world-version.mjs`; RC18's Dockerfile copied only `server.mjs`, so Node could not resolve those local runtime modules inside the image.
+- RC19 copies both imported modules into `/opt/hem` alongside `server.mjs`. A regression test derives the local imports from `server.mjs` and requires matching Dockerfile `COPY` directives, while the release verifier independently checks both modules are shipped.
