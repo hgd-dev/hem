@@ -1,4 +1,4 @@
-# HEM RC25 verification record
+# HEM RC26 verification record
 
 Date: 2026-09-01
 
@@ -6,7 +6,7 @@ Date: 2026-09-01
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **97/97 passing** source/logic/security/release-gate tests in the current RC25 local pass.
+- `npm test`: **97/97 passing** source/logic/security/release-gate tests in the current RC26 local pass.
 - `npm run verify`: **55/55 release contracts passing**.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
@@ -100,17 +100,18 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 
 
 
-## RC25 historical readBuffer signature detection
+## RC26 historical readBuffer source-shape correction
 
-- The RC24 GitHub build reached the actual runtime-resolved zardoy `prismarine-chunk` fork (`c5feac83...`) and named its consumers, proving runtime-root selection was correct. It then failed before build because the patcher counted only the literal signature `readBuffer(smartBuffer, bitsPerValue)`.
-- RC25 detects `readBuffer` structurally and captures the real second parameter name from each method. The computed 1.21.5 no-prefix long count is emitted using that captured variable, so historical names such as `bitsPerBlock` are supported without weakening the decoder invariant.
-- A dedicated regression fixture uses `readBuffer(smartBuffer, bitsPerBlock)` and requires the output to contain `Math.ceil(this.data.capacity / Math.floor(64 / bitsPerBlock))`. Every structurally discovered method must receive exactly one RC25 fixed-count marker.
-- The patch ID is `hem-prismarine-chunk-1215-nosize-v4`; System Acceptance, certification and deployment all require this exact identity and matching decoder-path counts.
+- The RC25 GitHub build proved the patcher was targeting the correct runtime-resolved zardoy `prismarine-chunk` fork, but that fork still did not match the assumed two-argument method signature.
+- RC26 no longer depends on a bits-parameter name or even on a second parameter existing. It structurally accepts `readBuffer(<buffer>)` and `readBuffer(<buffer>, ...)` forms and captures the actual SmartBuffer parameter.
+- For Minecraft 1.21.5 no-prefix reads, RC26 uses `this.data.length()` as the authoritative packed-long count. That is the exact count the same allocated BitArray used to serialize into the <=1.21.4 VarInt prefix, so the decoder can omit the prefix without reverse-engineering the method signature.
+- Regression fixtures cover one-argument `readBuffer(smartBuffer)`, two-argument historical forms, and a renamed buffer parameter. Every discovered runtime decoder path must still receive exactly one RC26 marker.
+- The patch ID is `hem-prismarine-chunk-1215-nosize-v5`; System Acceptance, certification and deployment require this identity plus matching decoder-path counts.
 
 ## RC24 runtime-resolved prismarine-chunk root selection
 
 - GitHub Actions proved RC23's structural decoder-path test got past the first historical one-path `prismarine-chunk` copy, then failed on a second installed package-store copy whose `PaletteContainer` exposed no recognized `readBuffer` method. RC23 was still enumerating every matching `.pnpm` store directory, so an unreachable transitive copy could veto the browser build even when the web client's actual runtime dependency had already been repaired.
-- RC25 discovers patch targets through real Node resolution instead. The minecraft-web-client root is always resolved, and installed top-level packages are added only when their own dependency metadata declares `prismarine-chunk`; each such consumer resolves its own reachable copy. Blind `.pnpm` store scanning is removed.
+- RC26 discovers patch targets through real Node resolution instead. The minecraft-web-client root is always resolved, and installed top-level packages are added only when their own dependency metadata declares `prismarine-chunk`; each such consumer resolves its own reachable copy. Blind `.pnpm` store scanning is removed.
 - Every reachable root is still fail-closed. The report records `runtimeResolved: true`, the exact `consumers` list, root-relative path, before/after hashes, packed-size sentinels, and `readBufferMethods`/`computedReadPaths`. A genuinely used consumer with an unsupported decoder shape still stops the build, and the error names both the runtime root and its consumers.
 - A regression test creates two reachable runtime copies plus an unused pnpm store copy and requires the patcher to select only the two reachable roots. System Acceptance, deployment and final certification require every recorded patch report to be runtime-resolved with at least one consumer.
 
@@ -119,7 +120,7 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - Minecraft 1.21.5 paletted block/biome data arrays omit the legacy VarInt array-length prefix. For the non-spanning 64-bit storage used by these containers, the decoder must compute `ceil(entryCount / floor(64 / bitsPerValue))` words. The locked sentinels remain 4096 block entries at 5 bits = **342** longs and 64 biome entries at 3 bits = **4**.
 - RC21 live evidence exposed the actual chunk-stream desynchronization. RC22 introduced the deterministic post-install correction, but its patcher then failed in GitHub Actions because it hard-coded an expectation of two `readBuffer` methods after patching while the exact frozen v0.1.99 `prismarine-chunk` snapshot exposed only one matching path.
 - RC23 changes that assertion from a guessed method count to structural coverage: count the `readBuffer(smartBuffer, bitsPerValue)` methods that actually exist in the installed snapshot, patch the legacy length-read forms, then require `computedReadPaths === readBufferMethods` and `readBufferMethods >= 1`. A one-path historical layout must produce 1/1; a two-path layout must produce 2/2; any unpatched discovered path fails closed.
-- The build report records `decoderPaths.readBufferMethods` and `decoderPaths.computedReadPaths` alongside file hashes and packed-size sentinels. System Acceptance, final certification and production deployment all require patch ID `hem-prismarine-chunk-1215-nosize-v4` plus matching decoder-path coverage. This keeps the compatibility fix auditable without replacing the frozen dependency graph with moving packages.
+- The build report records `decoderPaths.readBufferMethods` and `decoderPaths.computedReadPaths` alongside file hashes and packed-size sentinels. System Acceptance, final certification and production deployment all require patch ID `hem-prismarine-chunk-1215-nosize-v5` plus matching decoder-path coverage. This keeps the compatibility fix auditable without replacing the frozen dependency graph with moving packages.
 
 ## RC21 checkout-integrity hotfix
 

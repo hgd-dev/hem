@@ -6,7 +6,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const PATCH_ID = 'hem-prismarine-chunk-1215-nosize-v4'
+export const PATCH_ID = 'hem-prismarine-chunk-1215-nosize-v5'
 
 export function packedLongCount (capacity, bitsPerValue) {
   if (!Number.isInteger(capacity) || capacity <= 0) throw new Error(`invalid palette capacity ${capacity}`)
@@ -59,11 +59,13 @@ export function patchPaletteContainerSource (input) {
     '$1if (!this.noSizePrefix) varInt.write(smartBuffer, this.data.length())'
   )
 
-  // Historical zardoy/prismarine-chunk snapshots do expose readBuffer, but the
-  // second parameter is not consistently named bitsPerValue.  Discover each
-  // method structurally, capture its real bits variable, and patch only inside
-  // that method body.  This is what RC25 got wrong by hard-coding the signature.
-  const methodHeader = /readBuffer\s*\(\s*smartBuffer\s*,\s*([A-Za-z_$][\w$]*)\s*\)\s*\{/g
+  // Historical zardoy/prismarine-chunk snapshots use more than one
+  // readBuffer signature. Some take only the SmartBuffer; others also take a
+  // bits parameter with varying names. Do not infer the 1.21.5 read length
+  // from that signature. The BitArray is already allocated with the exact
+  // non-spanning packed-long geometry, and its length() is the same long count
+  // that <=1.21.4 wrote into the now-removed VarInt prefix.
+  const methodHeader = /readBuffer\s*\(\s*([A-Za-z_$][\w$]*)(?:\s*,\s*[^)]*)?\)\s*\{/g
   const methods = []
   let match
   while ((match = methodHeader.exec(source))) {
@@ -78,7 +80,7 @@ export function patchPaletteContainerSource (input) {
       }
     }
     if (close < 0) throw new Error(`${PATCH_ID}: unterminated readBuffer method near offset ${match.index}`)
-    methods.push({ start: match.index, end: close, bits: match[1] })
+    methods.push({ start: match.index, end: close, buffer: match[1] })
     methodHeader.lastIndex = close
   }
   if (methods.length < 1) throw new Error(`${PATCH_ID}: PaletteContainer exposes no structurally recognizable readBuffer methods`)
@@ -86,32 +88,28 @@ export function patchPaletteContainerSource (input) {
   let patchedMethods = 0
   for (const method of [...methods].reverse()) {
     let body = source.slice(method.start, method.end)
-    const formula = `Math.ceil(this.data.capacity / Math.floor(64 / ${method.bits}))`
-    const marker = `// HEM ${PATCH_ID}: fixed 1.21.5 packed-long count (${method.bits})`
+    const longCount = 'this.data.length()'
+    const marker = `// HEM ${PATCH_ID}: fixed 1.21.5 packed-long count from allocated BitArray (no size prefix)`
     if (!body.includes(marker)) {
       let changed = false
-      body = body.replace(
-        /(^\s*)const\s+([A-Za-z_$][\w$]*)\s*=\s*varInt\.read\(smartBuffer\)/m,
-        (_all, indent, name) => {
-          changed = true
-          return `${indent}${marker}\n${indent}const ${name} = this.noSizePrefix\n${indent}  ? ${formula}\n${indent}  : varInt.read(smartBuffer)`
-        }
-      )
+      const countRead = new RegExp(`(^\\s*)const\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*varInt\\.read\\(${method.buffer}\\)`, 'm')
+      body = body.replace(countRead, (_all, indent, name) => {
+        changed = true
+        return `${indent}${marker}\n${indent}const ${name} = this.noSizePrefix\n${indent}  ? ${longCount}\n${indent}  : varInt.read(${method.buffer})`
+      })
       if (!changed) {
-        body = body.replace(
-          /(^\s*)this\.data\.readBuffer\(smartBuffer,\s*varInt\.read\(smartBuffer\)\s*\*\s*2\)/m,
-          (_all, indent) => {
-            changed = true
-            return `${indent}${marker}\n${indent}const hemLongs = this.noSizePrefix\n${indent}  ? ${formula}\n${indent}  : varInt.read(smartBuffer)\n${indent}this.data.readBuffer(smartBuffer, hemLongs * 2)`
-          }
-        )
+        const inlineRead = new RegExp(`(^\\s*)this\\.data\\.readBuffer\\(${method.buffer},\\s*varInt\\.read\\(${method.buffer}\\)\\s*\\*\\s*2\\)`, 'm')
+        body = body.replace(inlineRead, (_all, indent) => {
+          changed = true
+          return `${indent}${marker}\n${indent}const hemLongs = this.noSizePrefix\n${indent}  ? ${longCount}\n${indent}  : varInt.read(${method.buffer})\n${indent}this.data.readBuffer(${method.buffer}, hemLongs * 2)`
+        })
       }
-      if (!changed && !body.includes(formula)) {
-        throw new Error(`${PATCH_ID}: readBuffer(smartBuffer, ${method.bits}) has no recognized legacy length read; source shape is not recognized`)
+      if (!changed && !body.includes(longCount)) {
+        throw new Error(`${PATCH_ID}: readBuffer(${method.buffer}, ...) has no recognized legacy length read; source shape is not recognized`)
       }
-      if (!body.includes(marker) && body.includes(formula)) body = body.replace('{', `{\n    ${marker}`)
+      if (!body.includes(marker) && body.includes(longCount)) body = body.replace('{', `{\n    ${marker}`)
     }
-    if (!body.includes(formula)) throw new Error(`${PATCH_ID}: readBuffer(smartBuffer, ${method.bits}) lacks the computed 1.21.5 word-count formula after patch`)
+    if (!body.includes(longCount)) throw new Error(`${PATCH_ID}: readBuffer(${method.buffer}, ...) lacks the allocated 1.21.5 long-count path after patch`)
     patchedMethods++
     source = source.slice(0, method.start) + body + source.slice(method.end)
   }
@@ -263,7 +261,7 @@ export function patchChunkColumnSource (input) {
     source = replaceOnce(
       source,
       /(module\.exports = \(Block, mcData\) => \{\s*\n)/,
-      "$1  // HEM hem-prismarine-chunk-1215-nosize-v4: 1.21.5+ omits palette data length prefixes.\n  const noSizePrefix = mcData.version['>=']('1.21.5')\n",
+      "$1  // HEM hem-prismarine-chunk-1215-nosize-v5: 1.21.5+ omits palette data length prefixes.\n  const noSizePrefix = mcData.version['>=']('1.21.5')\n",
       'ChunkColumn 1.21.5 noSizePrefix version gate'
     )
   }
@@ -272,7 +270,7 @@ export function patchChunkColumnSource (input) {
   source = source.replace(/new ChunkSection\(\{(?![^}]*\bnoSizePrefix\b)/g, 'new ChunkSection({ noSizePrefix,')
   source = source.replace(/new BiomeSection\(\{(?![^}]*\bnoSizePrefix\b)/g, 'new BiomeSection({ noSizePrefix,')
 
-  // Network decode carries the critical live fix first isolated in RC22; RC25 patches only prismarine-chunk package roots that are actually reachable from runtime consumers.
+  // Network decode carries the critical live fix first isolated in RC22; RC26 patches only prismarine-chunk package roots that are actually reachable from runtime consumers.
   source = source.replace(/ChunkSection\.read\(reader, this\.maxBitsPerBlock\)(?![,\w])/, 'ChunkSection.read(reader, this.maxBitsPerBlock, noSizePrefix)')
   source = source.replace(/BiomeSection\.read\(reader, this\.maxBitsPerBiome\)(?![,\w])/, 'BiomeSection.read(reader, this.maxBitsPerBiome, noSizePrefix)')
 
@@ -322,7 +320,7 @@ export async function patchPackageRoot (packageRoot) {
   if (sizing.blocks5Bits !== 342 || sizing.biomes3Bits !== 4) throw new Error(`${PATCH_ID}: packed-long sizing invariant failed: ${JSON.stringify(sizing)}`)
 
   const decoderPaths = {
-    readBufferMethods: (paletteContainerAfter.match(/readBuffer\s*\(\s*smartBuffer\s*,\s*[A-Za-z_$][\w$]*\s*\)\s*\{/g) || []).length,
+    readBufferMethods: (paletteContainerAfter.match(/readBuffer\s*\(\s*[A-Za-z_$][\w$]*(?:\s*,\s*[^)]*)?\)\s*\{/g) || []).length,
     computedReadPaths: (paletteContainerAfter.match(new RegExp(`HEM ${PATCH_ID}: fixed 1\\.21\\.5 packed-long count`, 'g')) || []).length,
   }
   if (decoderPaths.readBufferMethods < 1 || decoderPaths.computedReadPaths !== decoderPaths.readBufferMethods) throw new Error(`${PATCH_ID}: decoder-path attestation mismatch ${JSON.stringify(decoderPaths)}`)
