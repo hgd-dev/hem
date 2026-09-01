@@ -225,7 +225,9 @@ try {
   if (!/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamPackageSha256 || '') || !/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamLockSha256 || '')) throw new Error('Built browser client is missing frozen v0.1.99 package/lock provenance')
   if (liveBuildIdentity.frozenLockfile !== true) throw new Error('Built browser client did not use the pinned v0.1.99 frozen lockfile')
   if (liveBuildIdentity.compatibilityMode !== 'pinned-v0.1.99-lockfile-1215-verified' || liveBuildIdentity.protocolVerified1215 !== true) throw new Error(`HEM 1.21.5 requires pinned v0.1.99 frozen dependencies plus verified protocol/data; got ${liveBuildIdentity.compatibilityMode}`)
-  pass('client.capability-contract', `upstream feature signals + v0.1.99 frozen dependency provenance + verified 1.21.5 protocol/data (${liveBuildIdentity.compatibilityMode})`)
+  if (liveBuildIdentity.prismarineChunkPatch?.patchId !== 'hem-prismarine-chunk-1215-nosize-v1' || liveBuildIdentity.prismarineChunkPatch?.reports?.length < 1) throw new Error('HEM 1.21.5 requires the deterministic prismarine-chunk no-size-prefix decoder patch')
+  if (!liveBuildIdentity.prismarineChunkPatch.reports.every(report => report.sizing?.blocks5Bits === 342 && report.sizing?.biomes3Bits === 4)) throw new Error('HEM 1.21.5 chunk patch sizing attestation is invalid')
+  pass('client.capability-contract', `upstream feature signals + v0.1.99 frozen dependency provenance + verified 1.21.5 protocol/data + chunk no-size-prefix patch (${liveBuildIdentity.compatibilityMode})`)
 
   await commandLogMatch(SHARED, 'seed', /424242/, 'Paper reports the configured shared-world seed', 10_000)
   pass('world.seed-authority', 'configured signed-64-bit/text seed transport reaches native Paper world generation authority')
@@ -2705,6 +2707,7 @@ try {
     upstreamLockSha256: buildIdentity.upstreamLockSha256,
     pnpmVersion: buildIdentity.pnpmVersion,
     frozenLockfile: buildIdentity.frozenLockfile === true,
+    prismarineChunkPatch: buildIdentity.prismarineChunkPatch,
     compatibilityMode: buildIdentity.compatibilityMode,
     soakMinutes: SOAK_MINUTES,
     gates: [...passedGates].sort(),

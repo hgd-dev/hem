@@ -10,7 +10,7 @@ HEM is a private, browser-native clean-room reproduction. It does **not** redist
 - PARTIAL RC11 live acceptance accelerates random ticks, grows a real wheat crop and requires the browser to observe its age transition; exhaustive scheduled-tick families remain
 - PARTIAL chest, furnace and hopper block-entity/container state paths are encoded in live two-browser acceptance; exhaustive block-entity NBT/data-component synchronization remains
 - PARTIAL server-authoritative time, rain/clear weather and difficulty are named live gates in RC11; `doDaylightCycle` false/true plus frozen-time semantics are also live-gated, while exhaustive remaining gamerules/day/weather transitions remain
-- PARTIAL HEM forwards render distance and RC11 certifies that setting transport plus a healthy rendered section working set; exhaustive spawn-chunk/ticket lifecycle and far-view eviction remain
+- PARTIAL HEM forwards render distance and RC11 certifies that setting transport; RC22 additionally repairs the finalized 1.21.5 paletted block/biome no-size-prefix decoder path after RC21 live evidence exposed chunk-stream desynchronization. A green live rendered-section working set plus exhaustive spawn-chunk/ticket lifecycle and far-view eviction remain to be proven
 - PARTIAL RC11 requires native world-border movement constraint, configured border damage, warning-distance/time packet updates and a timed lerp-size update to reach the browser; warning visual rendering and continuously measured moving-border interpolation remain
 - PARTIAL HEM validates Java signed-64-bit numeric seeds and forwards text/numeric seeds to Paper; RC11 also verifies Paper `/seed` reports the configured shared-world seed, while exhaustive generation equivalence remains
 
@@ -139,7 +139,7 @@ HEM is a private, browser-native clean-room reproduction. It does **not** redist
 - PARTIAL the pinned client capability contract includes perspective support and RC11 adds broader FOV/bobbing settings plus rendered-frame acceptance; exhaustive first/third-person animation equivalence remains
 - PARTIAL the browser renderer is exercised under live gameplay and RC11 adds rendered-frame/presentation acceptance; exhaustive particle-family visual equivalence remains
 - PARTIAL RC11 forwards a sky/day-cycle setting and already live-gates time/rain/clear transitions while requiring healthy rendered frames; exhaustive celestial/cloud/snow appearance remains
-- PARTIAL native 1.21.5 biome generation plus the live renderer path are now gated; exhaustive biome-color visual comparison remains
+- PARTIAL native 1.21.5 biome generation plus the live renderer path are gated; RC22 deterministically corrects 1.21.5 biome palette no-size-prefix decoding, but live green evidence and exhaustive biome-color visual comparison remain
 - PARTIAL RC11 forwards smooth-lighting and requires live rendered sections; exhaustive block-light/skylight/emissive pixel equivalence remains
 - PARTIAL water/lava synchronization is already live-gated and RC11 keeps a healthy rendered canvas through dimension/visual smoke; exhaustive transparency/sorting/flow rendering remains
 - PARTIAL RC11 requires a healthy renderer across Overworld/Nether/End transitions; exhaustive fog/color/distance equivalence remains

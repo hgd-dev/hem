@@ -63,14 +63,15 @@ Both use exactly the same Paper 1.21.5 path.
 
 ## Browser compatibility layer
 
-The browser client is built reproducibly from the exact `zardoy/minecraft-web-client` v0.1.99 stable-release commit `0359f20b8d721ea44c7ddb633c985a71574c73d3`, a later 0.1 release that inherits the 1.21.5 protocol-support update and includes additional runtime fixes. HEM preserves that release's checked-in `package.json` + `pnpm-lock.yaml`, installs them with the upstream-declared pnpm version and `--frozen-lockfile`, then verifies the installed graph resolves Minecraft 1.21.5 / protocol 770 / DataVersion 4325 before bundling. HEM patches only the client integration surface:
+The browser client is built reproducibly from the exact `zardoy/minecraft-web-client` v0.1.99 stable-release commit `0359f20b8d721ea44c7ddb633c985a71574c73d3`, a later 0.1 release that inherits the 1.21.5 protocol-support update and includes additional runtime fixes. HEM preserves that release's checked-in `package.json` + `pnpm-lock.yaml`, installs them with the upstream-declared pnpm version and `--frozen-lockfile`, then verifies the installed graph resolves Minecraft 1.21.5 / protocol 770 / DataVersion 4325 before bundling. HEM patches only the client integration surface plus one finalized 1.21.5 wire-format compatibility gap in the frozen historical chunk library:
 
 - the exposed supported-version list → only `1.21.5`;
 - `allowAutoConnect` → true in the built config;
 - HEM title;
-- HEM one-use authorization bridge.
+- HEM one-use authorization bridge;
+- a deterministic post-install `prismarine-chunk` patch for Minecraft 1.21.5 paletted block/biome arrays, which omit the legacy VarInt data-length prefix and therefore require fixed non-spanning packed-long counts.
 
-The build records the exact upstream Git commit, package/lock SHA-256 hashes, pnpm version and resolved dependency versions in `hem-build.json`.
+The chunk patch runs only after the exact frozen v0.1.99 install, fails closed if the historical source shape is not recognized, and records its package version, before/after source hashes and sizing sentinels in the build identity. The build records the exact upstream Git commit, package/lock SHA-256 hashes, pnpm version, resolved dependency versions and chunk-patch attestation in `hem-build.json`.
 
 This patch deliberately does **not** claim that the upstream renderer already has perfect 1.21.5 visual coverage. The real two-browser workflow is the compatibility gate.
 

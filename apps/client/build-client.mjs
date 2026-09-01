@@ -106,6 +106,19 @@ const pnpm = args => run('npx', ['--yes', `pnpm@${pnpmVersion}`, ...args], upstr
 process.env.CYPRESS_INSTALL_BINARY ??= '0'
 pnpm(['install', '--frozen-lockfile'])
 
+// The stable v0.1.99 snapshot predates the finalized 1.21.5 chunk palette
+// wire-format fix in its frozen prismarine-chunk graph. Patch only that installed
+// package after the authoritative lockfile install: 1.21.5+ omits the legacy
+// VarInt data-array size prefix and computes the fixed packed-long count instead.
+// The patch script fails closed if the historical source shape is unrecognized.
+const chunkPatchScript = path.join(here, 'patch-prismarine-chunk-1215.mjs')
+run('node', [chunkPatchScript, upstream])
+const chunkPatchReportPath = path.join(upstream, '.hem-prismarine-chunk-1215.json')
+const prismarineChunkPatch = JSON.parse(await fsp.readFile(chunkPatchReportPath, 'utf8'))
+if (prismarineChunkPatch.patchId !== 'hem-prismarine-chunk-1215-nosize-v1') throw new Error('HEM 1.21.5 prismarine-chunk patch identity mismatch')
+if (prismarineChunkPatch.reports?.length < 1) throw new Error('HEM 1.21.5 prismarine-chunk patch did not attest an installed package')
+if (!prismarineChunkPatch.reports.every(report => report.sizing?.blocks5Bits === 342 && report.sizing?.biomes3Bits === 4)) throw new Error('HEM 1.21.5 prismarine-chunk patch sizing attestation mismatch')
+
 // A frozen install is only useful if nothing rewrote the lock/package metadata.
 // Re-hash both files immediately after install so dependency drift fails closed.
 const installedPackageSha256 = createHash('sha256').update(await fsp.readFile(pkgPath)).digest('hex')
@@ -230,7 +243,7 @@ delete config.defaultProxy
 await fsp.writeFile(configPath, JSON.stringify(config, null, 2) + '\n')
 
 await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
-  hemVersion: '1.0.0-rc.21',
+  hemVersion: '1.0.0-rc.22',
   minecraft: '1.21.5',
   upstreamRepo: repo,
   upstreamRef: ref,
@@ -244,6 +257,7 @@ await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
   upstreamLockSha256,
   pnpmVersion,
   frozenLockfile: true,
+  prismarineChunkPatch,
   protocolVerified1215,
   compatibilityMode,
   ...dependencyVersions,

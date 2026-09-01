@@ -1,4 +1,4 @@
-# HEM RC21 verification record
+# HEM RC22 verification record
 
 Date: 2026-08-31
 
@@ -6,8 +6,8 @@ Date: 2026-08-31
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **89/89 passing** source/logic/security/release-gate tests in the current RC21 local pass.
-- `npm run verify`: **54/54 release contracts passing** across 94 source files.
+- `npm test`: **93/93 passing** source/logic/security/release-gate tests in the current RC22 local pass.
+- `npm run verify`: **55/55 release contracts passing**.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
 - HEM browser build script checks out the exact v0.1.99 stable-release commit `0359f20b8d721ea44c7ddb633c985a71574c73d3`, preserves and hashes its checked-in `package.json` + `pnpm-lock.yaml`, installs with the upstream-declared pnpm version and `--frozen-lockfile`, forces the 1.21.5 version gate, enables auto-connect, and refuses to bundle unless the resulting installed graph resolves Minecraft 1.21.5 / protocol 770 / DataVersion 4325 with complete registry round-trips and the native Spring to Life item-definition layer.
@@ -98,6 +98,14 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - RC18 adds a persistent per-canvas `__hemPreviewDragCount` that increments once for each real pointer drag while keeping the transient click-suppression flag unchanged. The Playwright gate now records the counter before and after an actual `page.mouse` drag and requires it to increase, so drag rotation remains mandatory without racing the click cleanup path.
 - Release contracts require both the persistent drag counter and the before/after Playwright assertion, preventing regression back to the false-negative signal.
 
+
+## RC22 Minecraft 1.21.5 chunk-palette decoder hotfix
+
+- RC21's manifest-verified GitHub run reached a ready Paper 1.21.5 shared world and real browser chunk streaming. The browser then failed repeatedly in `BiomeSection.read` / `ChunkColumn.load` with `VarInt is too big` and SmartBuffer target-offset errors before the later custom-skin gate could complete. This is live evidence of a decoder desynchronization, not a packaging or launcher false negative.
+- Minecraft 1.21.5 paletted block/biome data arrays omit the legacy VarInt array-length prefix. For the non-spanning 64-bit storage used by these containers, the decoder must compute `ceil(entryCount / floor(64 / bitsPerValue))` words. RC22 locks two sentinels: 4096 block entries at 5 bits require **342** longs, while 64 biome entries at 3 bits require **4**.
+- RC22 preserves the exact minecraft-web-client v0.1.99 commit `0359f20b8d721ea44c7ddb633c985a71574c73d3` and its frozen dependency graph. Immediately after the frozen install, `apps/client/patch-prismarine-chunk-1215.mjs` patches the installed historical `prismarine-chunk` source to thread `noSizePrefix` through block + biome containers and ChunkColumn decode/write construction. The script fails closed on unrecognized source shape and records before/after SHA-256 metadata in `.hem-prismarine-chunk-1215.json`; the report is embedded in `hem-build.json`.
+- System Acceptance, final certification and production deployment all require patch ID `hem-prismarine-chunk-1215-nosize-v1`. This keeps the fix auditable without replacing the frozen dependency graph with moving packages.
+- Source-side verification after this change is **93/93 tests** and **55/55 release contracts**. The decoder fix is **not yet live-proven**; the next exact GitHub System Acceptance run must get through real chunk loading and the remaining 163 gameplay/client gates before any PARTIAL row is promoted.
 
 ## RC21 checkout-integrity hotfix
 

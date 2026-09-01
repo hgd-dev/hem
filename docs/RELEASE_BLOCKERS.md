@@ -13,6 +13,8 @@ Status syntax is machine parsed. Only `OPEN` and `CLOSED` are valid. All four bl
 - OPEN production-r2-restore — On a disposable production-shaped host, upload a real backup to the configured Cloudflare R2 remote, restore it into an empty world volume, and verify native Paper world/player data before reconnecting clients.
 - OPEN household-manual-acceptance — Complete `docs/MANUAL_ACCEPTANCE.md` with both intended players across create/join/rejoin/save/restart/skin/settings flows and record the signed-off evidence.
 
+Current RC22 evidence note: the latest manifest-verified RC21 System Acceptance reached real Paper 1.21.5 terrain streaming but failed inside the browser's block/biome paletted-container decoder (`VarInt is too big` / SmartBuffer bounds). RC22 carries the deterministic 1.21.5 no-size-prefix decoder correction; the pinned-live and soak blockers remain OPEN until that exact build passes the full workflow.
+
 ## Promotion rule
 
 When each item is genuinely complete, place/produce its evidence in the expected location. Do not hand-edit status tokens to bypass evidence. Then run:

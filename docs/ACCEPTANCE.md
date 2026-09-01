@@ -24,7 +24,7 @@ The workflow verifies:
 3. Paper 1.21.5 reaches ready state for a real shared HEM world.
 4. Hudson and Elise each connect from independent Chromium contexts through the real WebSocket→TCP proxy.
 5. HEMGate authenticates both one-use launch sessions and Paper reports two players.
-6. Both clients load protocol 770 / 1.21.5 registries and live rendered chunk-section meshes.
+6. Both clients load protocol 770 / 1.21.5 registries and live rendered chunk-section meshes; `hem-build.json` must attest the deterministic `hem-prismarine-chunk-1215-nosize-v1` block/biome no-size-prefix decoder patch before the renderer gate can pass.
 7. Each browser fetches the other player’s distinct custom HEM skin after post-auth profile re-announcement.
 8. A normal browser refresh reauthorizes through a rotated five-minute one-use `hem:session` lease without reusing the original launch token or putting secrets in the URL.
 9. The Docker proxy is actually stopped; both clients disconnect and Paper presence reaches zero. After restart, the same tabs recover only through fresh resume leases.
