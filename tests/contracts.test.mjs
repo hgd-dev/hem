@@ -850,3 +850,32 @@ test('RC20 client test origin never masks missing JSON or JS assets with index.h
   assert.match(server,/x-content-type-options':'nosniff'/)
   assert.match(server,/if \(wantsDocument\(req, u\.pathname\)\) actual = path\.join\(root, 'index\.html'\)/)
 })
+
+
+test('RC21 workflows reject incomplete or stale release checkouts before tests, builds, or system doctor',()=>{
+  for(const rel of ['.github/workflows/ci.yml','.github/workflows/system-1215.yml','.github/workflows/deploy-cloudflare.yml']){
+    const workflow=read(rel)
+    const manifestIndex=workflow.indexOf('sha256sum -c SOURCE_MANIFEST.sha256')
+    assert.ok(manifestIndex>=0,`${rel} does not verify the shipped source manifest`)
+    for(const later of ['npm test','node apps/client/build-client.mjs','npm run doctor:system']){
+      const i=workflow.indexOf(later)
+      if(i>=0) assert.ok(manifestIndex<i,`${rel} verifies the manifest after ${later}`)
+    }
+  }
+  const manifest=read('SOURCE_MANIFEST.sha256')
+  assert.match(manifest,/\.\/scripts\/doctor\.mjs/)
+  const pkg=JSON.parse(read('package.json'))
+  assert.equal(pkg.scripts['doctor:system'],'node scripts/doctor.mjs --system')
+})
+
+
+test('RC21 repo-root package and package script preserve a directly extractable complete checkout',()=>{
+  const pkg=JSON.parse(read('package.json'))
+  assert.equal(pkg.scripts['package:repo-root'],'node scripts/package-repo-root.mjs')
+  const pack=read('scripts/package-repo-root.mjs')
+  assert.match(pack,/REPO_ROOT\.zip/)
+  assert.match(pack,/scripts\/source-manifest\.mjs/)
+  assert.match(pack,/'-qr', out, '\.'/)
+  assert.match(pack,/\.\/apps\/client\/upstream\/\*/)
+  assert.match(pack,/\.\/\.git\/\*/)
+})

@@ -1,6 +1,6 @@
 {
   "name": "hem",
-  "version": "1.0.0-rc.20",
+  "version": "1.0.0-rc.21",
   "private": true,
   "type": "module",
   "scripts": {
@@ -23,7 +23,8 @@
     "manifest:verify": "node scripts/source-manifest.mjs",
     "parity:full": "node scripts/parity-report.mjs --final",
     "doctor": "node scripts/doctor.mjs",
-    "doctor:system": "node scripts/doctor.mjs --system"
+    "doctor:system": "node scripts/doctor.mjs --system",
+    "package:repo-root": "node scripts/package-repo-root.mjs"
   },
   "engines": {
     "node": ">=22"

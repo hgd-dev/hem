@@ -1,4 +1,4 @@
-# HEM RC20 verification record
+# HEM RC21 verification record
 
 Date: 2026-08-31
 
@@ -6,8 +6,8 @@ Date: 2026-08-31
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **87/87 passing** source/logic/security/release-gate tests in the current RC20 local pass.
-- `npm run verify`: **54/54 release contracts passing** across 93 source files.
+- `npm test`: **89/89 passing** source/logic/security/release-gate tests in the current RC21 local pass.
+- `npm run verify`: **54/54 release contracts passing** across 94 source files.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
 - HEM browser build script checks out the exact v0.1.99 stable-release commit `0359f20b8d721ea44c7ddb633c985a71574c73d3`, preserves and hashes its checked-in `package.json` + `pnpm-lock.yaml`, installs with the upstream-declared pnpm version and `--frozen-lockfile`, forces the 1.21.5 version gate, enables auto-connect, and refuses to bundle unless the resulting installed graph resolves Minecraft 1.21.5 / protocol 770 / DataVersion 4325 with complete registry round-trips and the native Spring to Life item-definition layer.
@@ -99,12 +99,13 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - Release contracts require both the persistent drag counter and the before/after Playwright assertion, preventing regression back to the false-negative signal.
 
 
-## RC20 live-runtime stabilization
-- GitHub System Acceptance now reaches a real Paper 1.21.5 shared world and launches the browser client. RC19 then failed before HEM authorization because the initial v0.1.98 browser runtime threw spawn/entity-side errors (`Cannot read properties of undefined (reading 'id')`, `Cannot set properties of undefined (setting 'yaw')`) and an `Unexpected token '<'` parse error.
-- RC20 moves the exact browser pin forward to minecraft-web-client **v0.1.99** commit `0359f20b8d721ea44c7ddb633c985a71574c73d3`. It keeps the exact-commit requirement, upstream frozen lockfile, package/lock hashes and HEM post-install verification for Minecraft 1.21.5 / protocol 770 / DataVersion 4325. This is not a moving branch or an unverified protocol bump.
-- The test-only static client origin no longer turns missing assets into the SPA document. Document navigation may fall back to `index.html`; missing JSON, JavaScript, WASM or other static resources now return HTTP 404 with `X-Content-Type-Options: nosniff` and an explicit `[HEM test] missing client asset ...` log.
-- The two-browser harness now records same-origin asset request failures, non-OK JSON/JS/WASM responses and HTML MIME responses as fatal diagnostics. This prevents an HTML fallback from masquerading as a JavaScript/JSON parser failure and will distinguish missing build resources from a true v0.1.99 packet/entity incompatibility on the next live run.
-- Source-side verification is **87/87 tests** and **54/54 release contracts**. The live v0.1.99 Paper/browser result remains unclaimed until the exact GitHub Actions workflow is rerun.
+## RC21 checkout-integrity hotfix
+
+- The exact RC20 source ZIP was re-extracted after the GitHub failure and still passed 87/87 tests locally, including the presence of `scripts/doctor.mjs`. The failing GitHub checkout therefore represented a partial/stale repository merge rather than the canonical RC20 package.
+- RC21 makes `sha256sum -c SOURCE_MANIFEST.sha256` the first source-integrity action after Node setup in CI, System Acceptance and production Cloudflare deployment. A missing/stale shipped file now fails immediately by filename before `npm test`, client build or `npm run doctor:system` can produce misleading cascade failures.
+- RC21 adds `npm run package:repo-root`, producing a directly extractable `HEM_v1.0.0_RC21_REPO_ROOT.zip` with the repository files at ZIP root. This removes the manual nested `hem_rcXX_build` copy/merge step for GitHub updates.
+- RC20's live-runtime changes are retained unchanged: exact minecraft-web-client v0.1.99 commit `0359f20b8d721ea44c7ddb633c985a71574c73d3`, frozen lockfile, 1.21.5/protocol-770/DataVersion-4325 verification, strict static-asset 404 behavior and browser request diagnostics.
+- Source-side verification is **89/89 tests** and **54/54 release contracts** after the RC21 integrity gates. The live v0.1.99 Paper/browser result remains unclaimed until the exact GitHub Actions workflow is rerun from the verified checkout.
 
 ## RC19 orchestrator runtime-module packaging hotfix
 
