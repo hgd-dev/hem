@@ -115,10 +115,11 @@ const chunkPatchScript = path.join(here, 'patch-prismarine-chunk-1215.mjs')
 run('node', [chunkPatchScript, upstream])
 const chunkPatchReportPath = path.join(upstream, '.hem-prismarine-chunk-1215.json')
 const prismarineChunkPatch = JSON.parse(await fsp.readFile(chunkPatchReportPath, 'utf8'))
-if (prismarineChunkPatch.patchId !== 'hem-prismarine-chunk-1215-nosize-v2') throw new Error('HEM 1.21.5 prismarine-chunk patch identity mismatch')
+if (prismarineChunkPatch.patchId !== 'hem-prismarine-chunk-1215-nosize-v3') throw new Error('HEM 1.21.5 prismarine-chunk patch identity mismatch')
 if (prismarineChunkPatch.reports?.length < 1) throw new Error('HEM 1.21.5 prismarine-chunk patch did not attest an installed package')
 if (!prismarineChunkPatch.reports.every(report => report.sizing?.blocks5Bits === 342 && report.sizing?.biomes3Bits === 4)) throw new Error('HEM 1.21.5 prismarine-chunk patch sizing attestation mismatch')
 if (!prismarineChunkPatch.reports.every(report => report.decoderPaths?.readBufferMethods >= 1 && report.decoderPaths?.computedReadPaths === report.decoderPaths?.readBufferMethods)) throw new Error('HEM 1.21.5 prismarine-chunk decoder-path attestation mismatch')
+if (!prismarineChunkPatch.reports.every(report => report.runtimeResolved === true && Array.isArray(report.consumers) && report.consumers.length >= 1)) throw new Error('HEM 1.21.5 prismarine-chunk patch is not tied to runtime-resolved consumers')
 
 // A frozen install is only useful if nothing rewrote the lock/package metadata.
 // Re-hash both files immediately after install so dependency drift fails closed.
@@ -244,7 +245,7 @@ delete config.defaultProxy
 await fsp.writeFile(configPath, JSON.stringify(config, null, 2) + '\n')
 
 await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
-  hemVersion: '1.0.0-rc.23',
+  hemVersion: '1.0.0-rc.24',
   minecraft: '1.21.5',
   upstreamRepo: repo,
   upstreamRef: ref,

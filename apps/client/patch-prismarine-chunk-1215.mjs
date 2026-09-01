@@ -6,7 +6,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const PATCH_ID = 'hem-prismarine-chunk-1215-nosize-v2'
+export const PATCH_ID = 'hem-prismarine-chunk-1215-nosize-v3'
 
 export function packedLongCount (capacity, bitsPerValue) {
   if (!Number.isInteger(capacity) || capacity <= 0) throw new Error(`invalid palette capacity ${capacity}`)
@@ -226,7 +226,7 @@ export function patchChunkColumnSource (input) {
     source = replaceOnce(
       source,
       /(module\.exports = \(Block, mcData\) => \{\s*\n)/,
-      "$1  // HEM hem-prismarine-chunk-1215-nosize-v2: 1.21.5+ omits palette data length prefixes.\n  const noSizePrefix = mcData.version['>=']('1.21.5')\n",
+      "$1  // HEM hem-prismarine-chunk-1215-nosize-v3: 1.21.5+ omits palette data length prefixes.\n  const noSizePrefix = mcData.version['>=']('1.21.5')\n",
       'ChunkColumn 1.21.5 noSizePrefix version gate'
     )
   }
@@ -235,7 +235,7 @@ export function patchChunkColumnSource (input) {
   source = source.replace(/new ChunkSection\(\{(?![^}]*\bnoSizePrefix\b)/g, 'new ChunkSection({ noSizePrefix,')
   source = source.replace(/new BiomeSection\(\{(?![^}]*\bnoSizePrefix\b)/g, 'new BiomeSection({ noSizePrefix,')
 
-  // Network decode carries the critical live fix first isolated in RC22; RC23 corrects patcher source-shape attestation.
+  // Network decode carries the critical live fix first isolated in RC22; RC24 patches only prismarine-chunk package roots that are actually reachable from runtime consumers.
   source = source.replace(/ChunkSection\.read\(reader, this\.maxBitsPerBlock\)(?![,\w])/, 'ChunkSection.read(reader, this.maxBitsPerBlock, noSizePrefix)')
   source = source.replace(/BiomeSection\.read\(reader, this\.maxBitsPerBiome\)(?![,\w])/, 'BiomeSection.read(reader, this.maxBitsPerBiome, noSizePrefix)')
 
@@ -295,44 +295,90 @@ export async function patchPackageRoot (packageRoot) {
   return { patchId: PATCH_ID, packageVersion: version, sizing, decoderPaths, files: hashes }
 }
 
-async function findPrismarineChunkRoots (upstreamRoot) {
-  const req = createRequire(path.join(upstreamRoot, 'package.json'))
-  const roots = new Set()
-  try {
-    let cursor = path.dirname(fs.realpathSync(req.resolve('prismarine-chunk')))
-    while (cursor !== path.dirname(cursor)) {
-      const pkg = path.join(cursor, 'package.json')
-      if (fs.existsSync(pkg)) {
-        try {
-          if (JSON.parse(fs.readFileSync(pkg, 'utf8')).name === 'prismarine-chunk') { roots.add(cursor); break }
-        } catch {}
-      }
-      cursor = path.dirname(cursor)
-    }
-  } catch (error) {
-    throw new Error(`${PATCH_ID}: cannot resolve installed prismarine-chunk: ${error.message}`)
-  }
-
-  const pnpmDir = path.join(upstreamRoot, 'node_modules', '.pnpm')
-  if (fs.existsSync(pnpmDir)) {
-    for (const entry of await fsp.readdir(pnpmDir)) {
-      const candidate = path.join(pnpmDir, entry, 'node_modules', 'prismarine-chunk')
-      if (!fs.existsSync(candidate)) continue
+function packageRootFromResolved (resolved, expectedName = 'prismarine-chunk') {
+  let cursor = path.dirname(fs.realpathSync(resolved))
+  while (cursor !== path.dirname(cursor)) {
+    const pkgPath = path.join(cursor, 'package.json')
+    if (fs.existsSync(pkgPath)) {
       try {
-        const real = fs.realpathSync(candidate)
-        const pkg = JSON.parse(await fsp.readFile(path.join(real, 'package.json'), 'utf8'))
-        if (pkg.name === 'prismarine-chunk') roots.add(real)
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+        if (pkg.name === expectedName) return cursor
       } catch {}
     }
+    cursor = path.dirname(cursor)
   }
-  return [...roots]
+  return null
+}
+
+function topLevelPackageJsons (nodeModulesRoot) {
+  if (!fs.existsSync(nodeModulesRoot)) return []
+  const out = []
+  for (const name of fs.readdirSync(nodeModulesRoot)) {
+    if (name === '.pnpm' || name.startsWith('.')) continue
+    const first = path.join(nodeModulesRoot, name)
+    if (name.startsWith('@')) {
+      if (!fs.existsSync(first) || !fs.statSync(first).isDirectory()) continue
+      for (const child of fs.readdirSync(first)) {
+        const pkg = path.join(first, child, 'package.json')
+        if (fs.existsSync(pkg)) out.push(pkg)
+      }
+    } else {
+      const pkg = path.join(first, 'package.json')
+      if (fs.existsSync(pkg)) out.push(pkg)
+    }
+  }
+  return out
+}
+
+export async function findRuntimePrismarineChunkRoots (upstreamRoot) {
+  const absolute = path.resolve(upstreamRoot)
+  const roots = new Map()
+  const register = (consumer, req) => {
+    let resolved
+    try { resolved = req.resolve('prismarine-chunk') } catch { return }
+    const root = packageRootFromResolved(resolved)
+    if (!root) throw new Error(`${PATCH_ID}: ${consumer} resolves prismarine-chunk but its package root could not be identified`)
+    const real = fs.realpathSync(root)
+    if (!roots.has(real)) roots.set(real, new Set())
+    roots.get(real).add(consumer)
+  }
+
+  // The application root is always a runtime consumer because minecraft-web-client
+  // imports prismarine-chunk directly in addition to Mineflayer using it internally.
+  const rootRequire = createRequire(path.join(absolute, 'package.json'))
+  register('minecraft-web-client', rootRequire)
+
+  // pnpm can keep several historical prismarine-chunk copies in .pnpm.  Only a
+  // copy reachable through a package that actually declares prismarine-chunk can
+  // affect the bundle.  Discover those consumers through their real Node resolver
+  // instead of blindly patching every package-store copy.
+  for (const pkgPath of topLevelPackageJsons(path.join(absolute, 'node_modules'))) {
+    let pkg
+    try { pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) } catch { continue }
+    const declares = {
+      ...(pkg.dependencies || {}),
+      ...(pkg.optionalDependencies || {}),
+      ...(pkg.peerDependencies || {}),
+    }
+    if (!Object.prototype.hasOwnProperty.call(declares, 'prismarine-chunk')) continue
+    register(pkg.name || path.basename(path.dirname(pkgPath)), createRequire(pkgPath))
+  }
+
+  if (!roots.size) throw new Error(`${PATCH_ID}: no runtime-resolved prismarine-chunk package roots found`)
+  return [...roots.entries()].map(([root, consumers]) => ({ root, consumers: [...consumers].sort() }))
 }
 
 export async function main (upstreamRoot = process.argv[2] || process.cwd()) {
-  const roots = await findPrismarineChunkRoots(path.resolve(upstreamRoot))
-  if (!roots.length) throw new Error(`${PATCH_ID}: no installed prismarine-chunk package roots found`)
+  const runtimeRoots = await findRuntimePrismarineChunkRoots(path.resolve(upstreamRoot))
   const reports = []
-  for (const root of roots) reports.push({ root: path.relative(path.resolve(upstreamRoot), root), ...(await patchPackageRoot(root)) })
+  for (const entry of runtimeRoots) {
+    const relativeRoot = path.relative(path.resolve(upstreamRoot), entry.root) || '.'
+    try {
+      reports.push({ root: relativeRoot, consumers: entry.consumers, runtimeResolved: true, ...(await patchPackageRoot(entry.root)) })
+    } catch (error) {
+      throw new Error(`${PATCH_ID}: failed runtime-resolved prismarine-chunk root ${relativeRoot} for consumer(s) ${entry.consumers.join(', ')}: ${error.message}`)
+    }
+  }
   const report = {
     patchId: PATCH_ID,
     minecraft: '1.21.5',
@@ -341,7 +387,7 @@ export async function main (upstreamRoot = process.argv[2] || process.cwd()) {
   }
   const reportPath = path.join(path.resolve(upstreamRoot), '.hem-prismarine-chunk-1215.json')
   await fsp.writeFile(reportPath, JSON.stringify(report, null, 2) + '\n')
-  console.log(`HEM ${PATCH_ID} applied to ${reports.length} prismarine-chunk package root(s); 4096@5=${packedLongCount(4096, 5)} longs, 64@3=${packedLongCount(64, 3)} longs`)
+  console.log(`HEM ${PATCH_ID} applied to ${reports.length} runtime-resolved prismarine-chunk package root(s); consumers=${reports.map(r => r.consumers.join('+')).join(',')}; 4096@5=${packedLongCount(4096, 5)} longs, 64@3=${packedLongCount(64, 3)} longs`)
   return report
 }
 

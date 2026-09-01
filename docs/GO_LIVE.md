@@ -1,4 +1,4 @@
-# HEM RC23 — go live
+# HEM RC24 — go live
 
 This is the shortest safe path from the source ZIP to a playable public HEM deployment.
 
@@ -90,7 +90,7 @@ npm run release:readiness -- --final
 npm run promote
 ```
 
-`npm run promote` converts the same evidence-complete RC23 source tree to `1.0.0` and regenerates `SOURCE_MANIFEST.sha256`. Rebuild/rerun **HEM 1.21.5 System Acceptance** against the same exact upstream SHA on that final tree with the exact pinned SHA (pinning is now mandatory in the workflow); replace the RC automation artifacts with the final ones. Then run:
+`npm run promote` converts the same evidence-complete RC24 source tree to `1.0.0` and regenerates `SOURCE_MANIFEST.sha256`. Rebuild/rerun **HEM 1.21.5 System Acceptance** against the same exact upstream SHA on that final tree with the exact pinned SHA (pinning is now mandatory in the workflow); replace the RC automation artifacts with the final ones. Then run:
 
 ```bash
 npm run release:guard

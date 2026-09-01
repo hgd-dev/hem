@@ -1,5 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import {
   PATCH_ID,
   packedLongCount,
@@ -7,10 +10,11 @@ import {
   patchPaletteBiomeSource,
   patchPaletteChunkSectionSource,
   patchChunkColumnSource,
+  findRuntimePrismarineChunkRoots,
 } from '../apps/client/patch-prismarine-chunk-1215.mjs'
 
 test('1.21.5 fixed palette sizing uses Mojang non-spanning long count', () => {
-  assert.equal(PATCH_ID, 'hem-prismarine-chunk-1215-nosize-v2')
+  assert.equal(PATCH_ID, 'hem-prismarine-chunk-1215-nosize-v3')
   assert.equal(packedLongCount(4096, 4), 256)
   assert.equal(packedLongCount(4096, 5), 342)
   assert.equal(packedLongCount(4096, 6), 410)
@@ -21,7 +25,7 @@ test('1.21.5 fixed palette sizing uses Mojang non-spanning long count', () => {
   assert.equal(Math.ceil(64 * 3 / 64), 3)
 })
 
-test('RC23 patch upgrades legacy palette containers to no-size-prefix reads and writes', () => {
+test('RC24 patch upgrades legacy palette containers to no-size-prefix reads and writes', () => {
   const legacy = `
 const BitArray = require('./BitArrayNoSpan')
 const constants = require('./constants')
@@ -92,7 +96,7 @@ class SingleValueContainer {
   assert.match(patched, /convertToDirect[\s\S]*?noSizePrefix: this\.noSizePrefix/)
 })
 
-test('RC23 patch threads 1.21.5 no-size-prefix through block and biome chunk decoders', () => {
+test('RC24 patch threads 1.21.5 no-size-prefix through block and biome chunk decoders', () => {
   const biomeLegacy = `
 const constants = require('./constants')
 const paletteContainer = require('./PaletteContainer')
@@ -255,7 +259,7 @@ module.exports = (Block, mcData) => {
   assert.match(column, /BiomeSection\.read\(reader, this\.maxBitsPerBiome, noSizePrefix\)/)
 })
 
-test('RC23 patch accepts a historical PaletteContainer with one shared readBuffer path', () => {
+test('RC24 patch accepts a historical PaletteContainer with one shared readBuffer path', () => {
   const legacy = `
 const BitArray = require('./BitArrayNoSpan')
 const constants = require('./constants')
@@ -312,7 +316,7 @@ class SingleValueContainer {
   assert.equal((patched.match(/this\.noSizePrefix\s*\n\s*\? Math\.ceil\(this\.data\.capacity \/ Math\.floor\(64 \/ bitsPerValue\)\)/g) || []).length, 1)
 })
 
-test('RC23 patch fails closed when any discovered readBuffer path is left legacy', () => {
+test('RC24 patch fails closed when any discovered readBuffer path is left legacy', () => {
   const legacy = `
 const BitArray = require('./BitArrayNoSpan')
 const constants = require('./constants')
@@ -359,4 +363,34 @@ class SingleValueContainer {
 }
 `
   assert.throws(() => patchPaletteContainerSource(legacy), /must patch every discovered readBuffer path/)
+})
+
+
+test('RC24 patches only runtime-resolved prismarine-chunk roots, not every pnpm store copy', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'hem-chunk-roots-'))
+  const writePkg = async (dir, pkg) => {
+    await fs.mkdir(dir, { recursive: true })
+    await fs.writeFile(path.join(dir, 'package.json'), JSON.stringify(pkg))
+    await fs.writeFile(path.join(dir, 'index.js'), 'module.exports = {}\n')
+  }
+  try {
+    await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'fake-mwc', version: '1.0.0' }))
+    await writePkg(path.join(root, 'node_modules', 'prismarine-chunk'), { name: 'prismarine-chunk', version: 'runtime-top', main: 'index.js' })
+    await writePkg(path.join(root, 'node_modules', 'mineflayer'), { name: 'mineflayer', version: 'fake', main: 'index.js', dependencies: { 'prismarine-chunk': '*' } })
+    await writePkg(path.join(root, 'node_modules', 'mineflayer', 'node_modules', 'prismarine-chunk'), { name: 'prismarine-chunk', version: 'runtime-mineflayer', main: 'index.js' })
+    await writePkg(path.join(root, 'node_modules', '.pnpm', 'prismarine-chunk@unused', 'node_modules', 'prismarine-chunk'), { name: 'prismarine-chunk', version: 'unused-store-copy', main: 'index.js' })
+
+    const found = await findRuntimePrismarineChunkRoots(root)
+    assert.equal(found.length, 2)
+    const versions = []
+    for (const entry of found) {
+      const pkg = JSON.parse(await fs.readFile(path.join(entry.root, 'package.json'), 'utf8'))
+      versions.push(pkg.version)
+      assert.ok(entry.consumers.length >= 1)
+    }
+    assert.deepEqual(versions.sort(), ['runtime-mineflayer', 'runtime-top'])
+    assert.equal(versions.includes('unused-store-copy'), false)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
 })
