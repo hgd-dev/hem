@@ -63,7 +63,7 @@ Both use exactly the same Paper 1.21.5 path.
 
 ## Browser compatibility layer
 
-The browser client is built reproducibly from the exact `zardoy/minecraft-web-client` v0.1.98 release commit `cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78`, the upstream release whose notes include the 1.21.5 protocol-support update. HEM preserves that release's checked-in `package.json` + `pnpm-lock.yaml`, installs them with the upstream-declared pnpm version and `--frozen-lockfile`, then verifies the installed graph resolves Minecraft 1.21.5 / protocol 770 / DataVersion 4325 before bundling. HEM patches only the client integration surface:
+The browser client is built reproducibly from the exact `zardoy/minecraft-web-client` v0.1.99 stable-release commit `0359f20b8d721ea44c7ddb633c985a71574c73d3`, a later 0.1 release that inherits the 1.21.5 protocol-support update and includes additional runtime fixes. HEM preserves that release's checked-in `package.json` + `pnpm-lock.yaml`, installs them with the upstream-declared pnpm version and `--frozen-lockfile`, then verifies the installed graph resolves Minecraft 1.21.5 / protocol 770 / DataVersion 4325 before bundling. HEM patches only the client integration surface:
 
 - the exposed supported-version list → only `1.21.5`;
 - `allowAutoConnect` → true in the built config;

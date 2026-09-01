@@ -9,7 +9,7 @@
   // Expose a tiny read-only diagnostics surface for HEM's automated acceptance
   // runner. It deliberately contains no launch/resume secrets or profile credentials.
   const parity = {
-    hemVersion: '1.0.0-rc.19',
+    hemVersion: '1.0.0-rc.20',
     target: '1.21.5',
     connected: false,
     build: { checked: false, ok: false, compatibilityMode: '', upstreamRelease1215: null, protocolVerified1215: null, upstreamCommit: '' },
@@ -59,7 +59,7 @@
     parity.build.upstreamRelease1215 = build.upstreamRelease1215 === true
     parity.build.protocolVerified1215 = build.protocolVerified1215 === true
     parity.build.upstreamCommit = /^[0-9a-f]{40}$/i.test(build.upstreamCommit || '') ? build.upstreamCommit : ''
-    parity.build.ok = build.minecraft === '1.21.5' && build.hemVersion === parity.hemVersion && build.compatibilityMode === 'pinned-v0.1.98-lockfile-1215-verified' && build.upstreamReleaseTag === 'v0.1.98' && build.upstreamRelease1215 === true && build.protocolVerified1215 === true && build.frozenLockfile === true && /^[0-9a-f]{64}$/i.test(build.upstreamLockSha256 || '')
+    parity.build.ok = build.minecraft === '1.21.5' && build.hemVersion === parity.hemVersion && build.compatibilityMode === 'pinned-v0.1.99-lockfile-1215-verified' && build.upstreamReleaseTag === 'v0.1.99' && build.upstreamRelease1215 === true && build.protocolVerified1215 === true && build.frozenLockfile === true && /^[0-9a-f]{64}$/i.test(build.upstreamLockSha256 || '')
     if (!parity.build.ok) showFatal('build-identity', 'The browser bundle identity does not match this HEM 1.21.5 release. Return to the HEM launcher and redeploy the matching client build.')
   }).catch(error => {
     parity.build.checked = true

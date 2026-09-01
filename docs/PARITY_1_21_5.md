@@ -134,7 +134,7 @@ HEM is a private, browser-native clean-room reproduction. It does **not** redist
 
 ## Rendering and presentation
 - PARTIAL HEM now refuses release unless live renderer chunk-section meshes exist while modern Crafter/Trial Spawner/Vault/Copper Bulb blockstates are loaded; exhaustive models remain
-- PARTIAL the build preserves the pinned v0.1.98 dependency graph and rejects a missing native 1.21.5 item-definition layer or missing Spring to Life item definitions; live exhaustive GUI/hand/world item rendering remains
+- PARTIAL the build preserves the pinned v0.1.99 dependency graph and rejects a missing native 1.21.5 item-definition layer or missing Spring to Life item definitions; live exhaustive GUI/hand/world item rendering remains
 - PARTIAL RC11 retains broad entity/equipment synchronization and adds a rendered-canvas smoke gate across dimensions; exhaustive model/pose/equipment-layer visual comparison remains
 - PARTIAL the pinned client capability contract includes perspective support and RC11 adds broader FOV/bobbing settings plus rendered-frame acceptance; exhaustive first/third-person animation equivalence remains
 - PARTIAL the browser renderer is exercised under live gameplay and RC11 adds rendered-frame/presentation acceptance; exhaustive particle-family visual equivalence remains

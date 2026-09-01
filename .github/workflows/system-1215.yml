@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
     inputs:
       mwc_ref:
-        description: Exact 40-character minecraft-web-client commit SHA (defaults to HEM's pinned v0.1.98 commit carrying the 1.21.5 protocol update)
+        description: Exact 40-character minecraft-web-client commit SHA (defaults to HEM's pinned v0.1.99 commit carrying the 1.21.5 protocol update)
         required: false
-        default: cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78
+        default: 0359f20b8d721ea44c7ddb633c985a71574c73d3
         type: string
   push:
     branches: [main]
@@ -34,7 +34,7 @@ jobs:
         with: { node-version: '22' }
       - name: Build HEM browser client against 1.21.5 data/protocol
         env:
-          MWC_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.mwc_ref || 'cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78' }}
+          MWC_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.mwc_ref || '0359f20b8d721ea44c7ddb633c985a71574c73d3' }}
           HEM_REQUIRE_PINNED_MWC: 'true'
         run: node apps/client/build-client.mjs
       - name: Verify live-acceptance prerequisites and built client identity

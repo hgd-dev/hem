@@ -9,7 +9,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const upstream = path.join(here, 'upstream')
 const dist = path.join(here, 'dist')
 const repo = process.env.MWC_REPO || 'https://github.com/zardoy/minecraft-web-client.git'
-const ref = process.env.MWC_REF || 'cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78'
+const ref = process.env.MWC_REF || '0359f20b8d721ea44c7ddb633c985a71574c73d3'
 const requirePinnedRef = process.env.HEM_REQUIRE_PINNED_MWC === 'true'
 const exactCommitRef = /^[0-9a-f]{40}$/i.test(ref)
 if (requirePinnedRef && !exactCommitRef) {
@@ -74,27 +74,27 @@ const upstreamLockSha256 = createHash('sha256').update(lockSource).digest('hex')
 // IMPORTANT: do not rewrite dependency overrides for this historical release.
 // RC13 used an unfrozen install after injecting newer Prismarine versions. That
 // caused pnpm to re-resolve minecraft-protocol#master to a 2026 commit while the
-// v0.1.98 patch still targeted its original 2025 snapshot, producing
+// release patch still targeted its original dependency snapshot, producing
 // ERR_PNPM_PATCH_FAILED. The release's checked-in lockfile is part of the pinned
 // build provenance and must stay authoritative.
-if (!/minecraft-protocol/.test(lockSource)) throw new Error('Pinned v0.1.98 lockfile no longer contains minecraft-protocol; review HEM build provenance')
+if (!/minecraft-protocol/.test(lockSource)) throw new Error('Pinned v0.1.99 lockfile no longer contains minecraft-protocol; review HEM build provenance')
 
 // HEM intentionally exposes one protocol target. Historical minecraft-web-client
 // releases derive their supported-version surface dynamically, so grepping literal
-// strings from supportedVersions.mjs is NOT a valid support detector (v0.1.98 contains
-// a literal 1.7 token even though its release includes the 1.21.5 protocol update).
-// Preserve the pristine source hash for provenance, pin the known 1.21.5 release, then
+// strings from supportedVersions.mjs is NOT a valid support detector. Preserve the
+// pristine source hash for provenance, pin the later stable 0.1 release that inherits
+// the 1.21.5 protocol update, then
 // prove the installed protocol/data stack below before emitting hem-build.json.
 const supportedVersions = path.join(upstream, 'src', 'supportedVersions.mjs')
 if (!fs.existsSync(supportedVersions)) throw new Error('Upstream supportedVersions.mjs moved; review HEM client patch before release')
 const upstreamSupportedVersionsSource = await fsp.readFile(supportedVersions, 'utf8')
 const upstreamSupportedVersionsSha256 = createHash('sha256').update(upstreamSupportedVersionsSource).digest('hex')
 const upstreamLiteralVersionTokens = [...new Set([...upstreamSupportedVersionsSource.matchAll(/[\"'](\d+\.\d+(?:\.\d+)?)[\"']/g)].map(match => match[1]))]
-const known1215ReleaseCommit = 'cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78'
-const upstreamReleaseTag = sha.toLowerCase() === known1215ReleaseCommit ? 'v0.1.98' : ''
-const upstreamRelease1215 = upstreamReleaseTag === 'v0.1.98'
+const known1215ReleaseCommit = '0359f20b8d721ea44c7ddb633c985a71574c73d3'
+const upstreamReleaseTag = sha.toLowerCase() === known1215ReleaseCommit ? 'v0.1.99' : ''
+const upstreamRelease1215 = upstreamReleaseTag === 'v0.1.99'
 if (requirePinnedRef && !upstreamRelease1215) {
-  throw new Error(`HEM pinned certification currently requires minecraft-web-client v0.1.98 (${known1215ReleaseCommit}); resolved ${sha}`)
+  throw new Error(`HEM pinned certification currently requires minecraft-web-client v0.1.99 (${known1215ReleaseCommit}); resolved ${sha}`)
 }
 console.log(`HEM upstream provenance: ${upstreamReleaseTag || 'unrecognized exact commit'} @ ${sha}; literal supportedVersions tokens are informational only: ${upstreamLiteralVersionTokens.join(', ') || '(none)'}`)
 // Narrow the launcher to HEM's single certified target. The post-install verification
@@ -144,7 +144,7 @@ if (mcData.version?.dataVersion != null && mcData.version.dataVersion !== 4325) 
 
 const assetsPackage = require('mc-assets/package.json')
 const itemDefinitions = require('mc-assets/dist/itemDefinitions.json')
-if (!Object.prototype.hasOwnProperty.call(itemDefinitions, '1.21.5')) throw new Error('Pinned v0.1.98 mc-assets does not advertise a 1.21.5 item-definition layer')
+if (!Object.prototype.hasOwnProperty.call(itemDefinitions, '1.21.5')) throw new Error('Pinned v0.1.99 mc-assets does not advertise a 1.21.5 item-definition layer')
 for (const name of ['mace','wind_charge','brown_egg','blue_egg','firefly_bush','leaf_litter','wildflowers','bush','short_dry_grass','tall_dry_grass','cactus_flower']) {
   if (!itemDefinitions.latest?.[name]) throw new Error('HEM mc-assets missing 1.21.5-era item definition: ' + name)
 }
@@ -197,7 +197,7 @@ run('node', [dataCheck], upstream)
 const dependencyVersionsPath = path.join(upstream, '.hem-dependency-versions.json')
 const dependencyVersions = JSON.parse(await fsp.readFile(dependencyVersionsPath, 'utf8'))
 const protocolVerified1215 = true
-const compatibilityMode = upstreamRelease1215 ? 'pinned-v0.1.98-lockfile-1215-verified' : 'pinned-lockfile-1215-data-verified'
+const compatibilityMode = upstreamRelease1215 ? 'pinned-v0.1.99-lockfile-1215-verified' : 'pinned-lockfile-1215-data-verified'
 console.log(`HEM client compatibility mode: ${compatibilityMode}; protocol/data verification passed`)
 await fsp.rm(dataCheck, { force: true })
 await fsp.rm(dependencyVersionsPath, { force: true })
@@ -230,7 +230,7 @@ delete config.defaultProxy
 await fsp.writeFile(configPath, JSON.stringify(config, null, 2) + '\n')
 
 await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
-  hemVersion: '1.0.0-rc.19',
+  hemVersion: '1.0.0-rc.20',
   minecraft: '1.21.5',
   upstreamRepo: repo,
   upstreamRef: ref,

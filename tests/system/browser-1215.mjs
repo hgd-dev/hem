@@ -1,6 +1,7 @@
 import { chromium } from 'playwright'
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs/promises'
+import path from 'node:path'
 
 const CONTROL = 'http://127.0.0.1:3000'
 const KEY = 'system-orchestrator-key-0123456789abcdef'
@@ -151,9 +152,26 @@ async function openPlayer(browser, port, user, token, fatal, label) {
   page.on('console', message => {
     if (message.type() === 'error') console.log(`${label} console error:`, message.text())
   })
-  page.on('response', response => {
-    const match = /\/skins\/(hudson|elise)\.png(?:[?#]|$)/i.exec(response.url())
+  page.on('requestfailed', request => {
+    const url = request.url()
+    if (url.startsWith('http://127.0.0.1:4173/')) console.log(`${label} client request failed: ${url} :: ${request.failure()?.errorText || 'unknown'}`)
+  })
+  page.on('response', async response => {
+    const url = response.url()
+    const match = /\/skins\/(hudson|elise)\.png(?:[?#]|$)/i.exec(url)
     if (match && response.ok()) skinFetches.add(match[1].toLowerCase())
+    if (url.startsWith('http://127.0.0.1:4173/')) {
+      const pathname = new URL(url).pathname
+      const assetLike = /\.(?:json|js|mjs|wasm)(?:$|\?)/i.test(pathname)
+      const contentType = String(response.headers()['content-type'] || '')
+      if (!response.ok() && assetLike) {
+        const detail = `${label} client asset HTTP ${response.status()}: ${pathname}`
+        console.log(detail); fatal.push(detail)
+      } else if (assetLike && /text\/html/i.test(contentType)) {
+        const detail = `${label} client asset returned HTML instead of ${path.extname(pathname) || 'asset'}: ${pathname}`
+        console.log(detail); fatal.push(detail)
+      }
+    }
   })
   await page.goto(launchUrl(port, user, token), { waitUntil: 'domcontentloaded', timeout: 120_000 })
   await pageReady(page, user)
@@ -201,13 +219,13 @@ try {
   const requiredCapabilities = ['keybindings','renderDistanceSetting','rawMouseInput','resourcePackTextures','creativeInventory','debugOverlay','thirdPerson','sounds']
   const missingCapabilities = requiredCapabilities.filter(name => liveBuildIdentity.capabilities?.[name] !== true)
   if (missingCapabilities.length) throw new Error(`Built browser client lost required HEM capability signals: ${missingCapabilities.join(', ')}`)
-  if (liveBuildIdentity.upstreamReleaseTag !== 'v0.1.98' || liveBuildIdentity.upstreamRelease1215 !== true) throw new Error('Built browser client is not tied to the known v0.1.98 1.21.5 release')
+  if (liveBuildIdentity.upstreamReleaseTag !== 'v0.1.99' || liveBuildIdentity.upstreamRelease1215 !== true) throw new Error('Built browser client is not tied to the known v0.1.99 1.21.5 release')
   if (!Array.isArray(liveBuildIdentity.upstreamLiteralVersionTokens)) throw new Error('Built browser client is missing upstream literal-version provenance')
   if (!/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamSupportedVersionsSha256 || '')) throw new Error('Built browser client is missing upstream supportedVersions source hash')
-  if (!/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamPackageSha256 || '') || !/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamLockSha256 || '')) throw new Error('Built browser client is missing frozen v0.1.98 package/lock provenance')
-  if (liveBuildIdentity.frozenLockfile !== true) throw new Error('Built browser client did not use the pinned v0.1.98 frozen lockfile')
-  if (liveBuildIdentity.compatibilityMode !== 'pinned-v0.1.98-lockfile-1215-verified' || liveBuildIdentity.protocolVerified1215 !== true) throw new Error(`HEM 1.21.5 requires pinned v0.1.98 frozen dependencies plus verified protocol/data; got ${liveBuildIdentity.compatibilityMode}`)
-  pass('client.capability-contract', `upstream feature signals + v0.1.98 frozen dependency provenance + verified 1.21.5 protocol/data (${liveBuildIdentity.compatibilityMode})`)
+  if (!/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamPackageSha256 || '') || !/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamLockSha256 || '')) throw new Error('Built browser client is missing frozen v0.1.99 package/lock provenance')
+  if (liveBuildIdentity.frozenLockfile !== true) throw new Error('Built browser client did not use the pinned v0.1.99 frozen lockfile')
+  if (liveBuildIdentity.compatibilityMode !== 'pinned-v0.1.99-lockfile-1215-verified' || liveBuildIdentity.protocolVerified1215 !== true) throw new Error(`HEM 1.21.5 requires pinned v0.1.99 frozen dependencies plus verified protocol/data; got ${liveBuildIdentity.compatibilityMode}`)
+  pass('client.capability-contract', `upstream feature signals + v0.1.99 frozen dependency provenance + verified 1.21.5 protocol/data (${liveBuildIdentity.compatibilityMode})`)
 
   await commandLogMatch(SHARED, 'seed', /424242/, 'Paper reports the configured shared-world seed', 10_000)
   pass('world.seed-authority', 'configured signed-64-bit/text seed transport reaches native Paper world generation authority')

@@ -475,7 +475,7 @@ test('final client certification and production deploy require an exact upstream
   assert.match(b,/\^\[0-9a-f\]\{40\}\$/)
   assert.match(b,/upstream checkout mismatch/)
   assert.match(b,/upstreamPinned:/)
-  assert.match(system,/default: cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78/)
+  assert.match(system,/default: 0359f20b8d721ea44c7ddb633c985a71574c73d3/)
   assert.match(system,/HEM_REQUIRE_PINNED_MWC: 'true'/)
   assert.match(system,/HEM_REQUIRE_PINNED_CERT: 'true'/)
   assert.doesNotMatch(system,/default: next/)
@@ -647,7 +647,7 @@ test('client build preserves frozen upstream provenance and verifies 1.21.5 prot
   const verifier=read('scripts/verify-certification.mjs')
   assert.match(b,/upstreamReleaseTag/); assert.match(b,/protocolVerified1215/); assert.match(b,/upstreamLiteralVersionTokens/)
   assert.match(b,/upstreamSupportedVersionsSha256/)
-  assert.match(b,/pinned-v0\.1\.98-lockfile-1215-verified/)
+  assert.match(b,/pinned-v0\.1\.99-lockfile-1215-verified/)
   assert.match(b,/--frozen-lockfile/)
   assert.doesNotMatch(b,/--no-frozen-lockfile/)
   assert.match(b,/upstreamLockSha256/)
@@ -656,10 +656,10 @@ test('client build preserves frozen upstream provenance and verifies 1.21.5 prot
   assert.match(b,/literal supportedVersions tokens are informational only/)
   assert.match(b,/createHash\('sha256'\)\.update\(upstreamSupportedVersionsSource\)/)
   assert.match(system,/compatibilityMode: buildIdentity\.compatibilityMode/)
-  assert.match(verifier,/pinned v0\.1\.98 frozen dependencies plus verified 1\.21\.5 protocol\/data/)
+  assert.match(verifier,/pinned v0\.1\.99 frozen dependencies plus verified 1\.21\.5 protocol\/data/)
   const workflow=read('.github/workflows/system-1215.yml')
-  assert.match(b,/cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78/)
-  assert.match(workflow,/default: cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78/)
+  assert.match(b,/0359f20b8d721ea44c7ddb633c985a71574c73d3/)
+  assert.match(workflow,/default: 0359f20b8d721ea44c7ddb633c985a71574c73d3/)
   assert.match(workflow,/HEM_REQUIRE_PINNED_MWC: 'true'/)
   assert.match(workflow,/HEM_REQUIRE_PINNED_CERT: 'true'/)
   assert.doesNotMatch(workflow,/default: next/)
@@ -717,7 +717,7 @@ test('RC13 native 1.21.5 mechanics are release-gated beyond registry sentinels',
     assert.ok(s.includes(`pass('${gate}'`),`missing system pass site for ${gate}`)
   }
   for(const marker of ['setCommandBlock','browser food consumption restores hunger','browser bucket pickup returns filled bucket','browser axe scraping weathered copper','native cow breeding creates child entity','browser-built Wither appears','Crafter emits iron-ingot recipe output','native oak-boat steering','browser-enchanted item persists enchantment component','browser anvil rename persists custom name','browser sprint-swims through a water lane','browser climbs native ladder','browser climbs native scaffolding','sticky piston slime assembly extension','browser toggles daylight detector inversion','browser flint-and-steel creates Nether portal blocks','native fishing catch reaches browser inventory','client respawns near valid Overworld bed spawn']) assert.ok(s.includes(marker),`missing live-mechanic marker ${marker}`)
-  assert.match(client,/process\.env\.MWC_REF \|\| 'cdd8c31a0e9261ee57fb66ff8ca5af0e074bff78'/)
+  assert.match(client,/process\.env\.MWC_REF \|\| '0359f20b8d721ea44c7ddb633c985a71574c73d3'/)
   assert.match(client,/spawnEggs = mcData\.itemsArray\.filter/)
   assert.match(client,/for \(const name of spawnEggs\)/)
 })
@@ -839,4 +839,14 @@ test('RC19 orchestrator runtime image ships every local module imported by serve
   for(const file of imports){
     assert.ok(docker.includes(`COPY apps/orchestrator/${file} ./${file}`),`orchestrator image does not copy imported runtime module ${file}`)
   }
+})
+
+
+test('RC20 client test origin never masks missing JSON or JS assets with index.html',()=>{
+  const server=read('tests/system/static-client.mjs')
+  assert.match(server,/wantsDocument/)
+  assert.match(server,/missing client asset/)
+  assert.match(server,/HEM client asset not found/)
+  assert.match(server,/x-content-type-options':'nosniff'/)
+  assert.match(server,/if \(wantsDocument\(req, u\.pathname\)\) actual = path\.join\(root, 'index\.html'\)/)
 })
