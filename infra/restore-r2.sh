@@ -52,7 +52,7 @@ done
 (cd "$TMP" && sha256sum -c hem-worlds.tar.gz.sha256)
 
 # Refuse an archive created by a materially different server baseline.
-grep -Fxq 'HEM: 1.0.0-rc.24' "$TMP/README.txt" || { echo 'Backup HEM release metadata does not match 1.0.0-rc.24.' >&2; exit 1; }
+grep -Fxq 'HEM: 1.0.0-rc.25' "$TMP/README.txt" || { echo 'Backup HEM release metadata does not match 1.0.0-rc.25.' >&2; exit 1; }
 grep -Fxq 'Paper: 1.21.5 build 114' "$TMP/README.txt" || { echo 'Backup Paper metadata does not match 1.21.5 build 114.' >&2; exit 1; }
 
 # Reject archive paths that could escape the target volume.

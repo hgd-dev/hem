@@ -14,7 +14,7 @@ import {
 } from '../apps/client/patch-prismarine-chunk-1215.mjs'
 
 test('1.21.5 fixed palette sizing uses Mojang non-spanning long count', () => {
-  assert.equal(PATCH_ID, 'hem-prismarine-chunk-1215-nosize-v3')
+  assert.equal(PATCH_ID, 'hem-prismarine-chunk-1215-nosize-v4')
   assert.equal(packedLongCount(4096, 4), 256)
   assert.equal(packedLongCount(4096, 5), 342)
   assert.equal(packedLongCount(4096, 6), 410)
@@ -25,7 +25,7 @@ test('1.21.5 fixed palette sizing uses Mojang non-spanning long count', () => {
   assert.equal(Math.ceil(64 * 3 / 64), 3)
 })
 
-test('RC24 patch upgrades legacy palette containers to no-size-prefix reads and writes', () => {
+test('RC25 patch upgrades legacy palette containers to no-size-prefix reads and writes', () => {
   const legacy = `
 const BitArray = require('./BitArrayNoSpan')
 const constants = require('./constants')
@@ -96,7 +96,7 @@ class SingleValueContainer {
   assert.match(patched, /convertToDirect[\s\S]*?noSizePrefix: this\.noSizePrefix/)
 })
 
-test('RC24 patch threads 1.21.5 no-size-prefix through block and biome chunk decoders', () => {
+test('RC25 patch threads 1.21.5 no-size-prefix through block and biome chunk decoders', () => {
   const biomeLegacy = `
 const constants = require('./constants')
 const paletteContainer = require('./PaletteContainer')
@@ -259,7 +259,7 @@ module.exports = (Block, mcData) => {
   assert.match(column, /BiomeSection\.read\(reader, this\.maxBitsPerBiome, noSizePrefix\)/)
 })
 
-test('RC24 patch accepts a historical PaletteContainer with one shared readBuffer path', () => {
+test('RC25 patch accepts a historical PaletteContainer with one shared readBuffer path', () => {
   const legacy = `
 const BitArray = require('./BitArrayNoSpan')
 const constants = require('./constants')
@@ -316,7 +316,7 @@ class SingleValueContainer {
   assert.equal((patched.match(/this\.noSizePrefix\s*\n\s*\? Math\.ceil\(this\.data\.capacity \/ Math\.floor\(64 \/ bitsPerValue\)\)/g) || []).length, 1)
 })
 
-test('RC24 patch fails closed when any discovered readBuffer path is left legacy', () => {
+test('RC25 patch converts every structurally discovered readBuffer path', () => {
   const legacy = `
 const BitArray = require('./BitArrayNoSpan')
 const constants = require('./constants')
@@ -362,11 +362,61 @@ class SingleValueContainer {
   }
 }
 `
-  assert.throws(() => patchPaletteContainerSource(legacy), /must patch every discovered readBuffer path/)
+  const patched = patchPaletteContainerSource(legacy)
+  assert.equal((patched.match(/readBuffer\s*\(\s*smartBuffer\s*,\s*[A-Za-z_$][\w$]*\s*\)\s*\{/g) || []).length, 2)
+  assert.equal((patched.match(/fixed 1\.21\.5 packed-long count/g) || []).length, 2)
 })
 
 
-test('RC24 patches only runtime-resolved prismarine-chunk roots, not every pnpm store copy', async () => {
+
+test('RC25 patch recognizes historical readBuffer parameter names other than bitsPerValue', () => {
+  const legacy = `
+const BitArray = require('./BitArrayNoSpan')
+const constants = require('./constants')
+const varInt = require('./varInt')
+class DirectPaletteContainer {
+  constructor (options) {
+    this.data = new BitArray({ bitsPerValue: options?.bitsPerValue, capacity: options?.capacity })
+  }
+  write (smartBuffer) {
+    varInt.write(smartBuffer, this.data.length())
+    this.data.writeBuffer(smartBuffer)
+  }
+  readBuffer (smartBuffer, bitsPerBlock) {
+    const wordCount = varInt.read(smartBuffer)
+    this.data.readBuffer(smartBuffer, wordCount * 2)
+    return this
+  }
+}
+class IndirectPaletteContainer {
+  constructor (options) {
+    this.data = new BitArray({ bitsPerValue: options?.bitsPerValue, capacity: options?.capacity })
+  }
+  set (index, value) { return this }
+  convertToDirect (bitsPerValue) { return new DirectPaletteContainer({ bitsPerValue, capacity: this.data.capacity }) }
+  write (smartBuffer) {
+    varInt.write(smartBuffer, this.data.length())
+    this.data.writeBuffer(smartBuffer)
+  }
+}
+class SingleValueContainer {
+  constructor (options) {
+    this.value = options?.value ?? 0
+  }
+  set (index, value) { return new IndirectPaletteContainer({}) }
+  write (smartBuffer) {
+    varInt.write(smartBuffer, this.value)
+    smartBuffer.writeUInt8(0)
+  }
+}
+`
+  const patched = patchPaletteContainerSource(legacy)
+  assert.match(patched, /readBuffer \(smartBuffer, bitsPerBlock\)/)
+  assert.match(patched, /Math\.ceil\(this\.data\.capacity \/ Math\.floor\(64 \/ bitsPerBlock\)\)/)
+  assert.match(patched, /fixed 1\.21\.5 packed-long count \(bitsPerBlock\)/)
+})
+
+test('RC25 patches only runtime-resolved prismarine-chunk roots, not every pnpm store copy', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'hem-chunk-roots-'))
   const writePkg = async (dir, pkg) => {
     await fs.mkdir(dir, { recursive: true })

@@ -6,7 +6,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const PATCH_ID = 'hem-prismarine-chunk-1215-nosize-v3'
+export const PATCH_ID = 'hem-prismarine-chunk-1215-nosize-v4'
 
 export function packedLongCount (capacity, bitsPerValue) {
   if (!Number.isInteger(capacity) || capacity <= 0) throw new Error(`invalid palette capacity ${capacity}`)
@@ -59,34 +59,72 @@ export function patchPaletteContainerSource (input) {
     '$1if (!this.noSizePrefix) varInt.write(smartBuffer, this.data.length())'
   )
 
-  // Every readBuffer implementation that exists in the installed historical snapshot
-  // must switch from the legacy VarInt-prefixed array length to Mojang's 1.21.5+
-  // fixed non-spanning SimpleBitStorage sizing rule.  Older prismarine-chunk
-  // snapshots can expose one shared readBuffer path while newer snapshots expose
-  // separate direct + indirect paths, so the invariant is structural rather than
-  // a hard-coded count of two.
-  const readBufferMethods = (source.match(/readBuffer\s*\(smartBuffer,\s*bitsPerValue\)\s*\{/g) || []).length
-  if (readBufferMethods < 1) throw new Error(`${PATCH_ID}: PaletteContainer exposes no readBuffer methods; source shape is not recognized`)
-  source = source.replace(
-    /(^\s*)const longs = varInt\.read\(smartBuffer\)/gm,
-    '$1const longs = this.noSizePrefix\n$1  ? Math.ceil(this.data.capacity / Math.floor(64 / bitsPerValue))\n$1  : varInt.read(smartBuffer)'
-  )
-  // Some historical snapshots inline the length read directly into readBuffer.
-  source = source.replace(
-    /(^\s*)this\.data\.readBuffer\(smartBuffer,\s*varInt\.read\(smartBuffer\)\s*\*\s*2\)/gm,
-    '$1const longs = this.noSizePrefix\n$1  ? Math.ceil(this.data.capacity / Math.floor(64 / bitsPerValue))\n$1  : varInt.read(smartBuffer)\n$1this.data.readBuffer(smartBuffer, longs * 2)'
-  )
+  // Historical zardoy/prismarine-chunk snapshots do expose readBuffer, but the
+  // second parameter is not consistently named bitsPerValue.  Discover each
+  // method structurally, capture its real bits variable, and patch only inside
+  // that method body.  This is what RC25 got wrong by hard-coding the signature.
+  const methodHeader = /readBuffer\s*\(\s*smartBuffer\s*,\s*([A-Za-z_$][\w$]*)\s*\)\s*\{/g
+  const methods = []
+  let match
+  while ((match = methodHeader.exec(source))) {
+    const open = source.indexOf('{', match.index)
+    let depth = 0
+    let close = -1
+    for (let i = open; i < source.length; i++) {
+      if (source[i] === '{') depth++
+      else if (source[i] === '}') {
+        depth--
+        if (depth === 0) { close = i + 1; break }
+      }
+    }
+    if (close < 0) throw new Error(`${PATCH_ID}: unterminated readBuffer method near offset ${match.index}`)
+    methods.push({ start: match.index, end: close, bits: match[1] })
+    methodHeader.lastIndex = close
+  }
+  if (methods.length < 1) throw new Error(`${PATCH_ID}: PaletteContainer exposes no structurally recognizable readBuffer methods`)
+
+  let patchedMethods = 0
+  for (const method of [...methods].reverse()) {
+    let body = source.slice(method.start, method.end)
+    const formula = `Math.ceil(this.data.capacity / Math.floor(64 / ${method.bits}))`
+    const marker = `// HEM ${PATCH_ID}: fixed 1.21.5 packed-long count (${method.bits})`
+    if (!body.includes(marker)) {
+      let changed = false
+      body = body.replace(
+        /(^\s*)const\s+([A-Za-z_$][\w$]*)\s*=\s*varInt\.read\(smartBuffer\)/m,
+        (_all, indent, name) => {
+          changed = true
+          return `${indent}${marker}\n${indent}const ${name} = this.noSizePrefix\n${indent}  ? ${formula}\n${indent}  : varInt.read(smartBuffer)`
+        }
+      )
+      if (!changed) {
+        body = body.replace(
+          /(^\s*)this\.data\.readBuffer\(smartBuffer,\s*varInt\.read\(smartBuffer\)\s*\*\s*2\)/m,
+          (_all, indent) => {
+            changed = true
+            return `${indent}${marker}\n${indent}const hemLongs = this.noSizePrefix\n${indent}  ? ${formula}\n${indent}  : varInt.read(smartBuffer)\n${indent}this.data.readBuffer(smartBuffer, hemLongs * 2)`
+          }
+        )
+      }
+      if (!changed && !body.includes(formula)) {
+        throw new Error(`${PATCH_ID}: readBuffer(smartBuffer, ${method.bits}) has no recognized legacy length read; source shape is not recognized`)
+      }
+      if (!body.includes(marker) && body.includes(formula)) body = body.replace('{', `{\n    ${marker}`)
+    }
+    if (!body.includes(formula)) throw new Error(`${PATCH_ID}: readBuffer(smartBuffer, ${method.bits}) lacks the computed 1.21.5 word-count formula after patch`)
+    patchedMethods++
+    source = source.slice(0, method.start) + body + source.slice(method.end)
+  }
 
   // Older implementations occasionally used the mathematically-wrong ceil(n*b/64)
-  // shortcut for no-prefix arrays. It under-reads whenever 64 % bitsPerValue != 0
-  // (e.g. 4096 block entries @ 5 bits: 320 vs the correct 342 longs).
+  // shortcut for no-prefix arrays. It under-reads whenever 64 % bits != 0.
   source = source.replace(
-    /Math\.ceil\(this\.data\.capacity\s*\*\s*bitsPerValue\s*\/\s*64\)/g,
-    'Math.ceil(this.data.capacity / Math.floor(64 / bitsPerValue))'
+    /Math\.ceil\(this\.data\.capacity\s*\*\s*([A-Za-z_$][\w$]*)\s*\/\s*64\)/g,
+    'Math.ceil(this.data.capacity / Math.floor(64 / $1))'
   )
   source = source.replace(
-    /Math\.ceil\((?:constants\.BLOCK_SECTION_VOLUME|constants\.BIOME_SECTION_VOLUME)\s*\*\s*bitsPerValue\s*\/\s*64\)/g,
-    'Math.ceil(this.data.capacity / Math.floor(64 / bitsPerValue))'
+    /Math\.ceil\((?:constants\.BLOCK_SECTION_VOLUME|constants\.BIOME_SECTION_VOLUME)\s*\*\s*([A-Za-z_$][\w$]*)\s*\/\s*64\)/g,
+    'Math.ceil(this.data.capacity / Math.floor(64 / $1))'
   )
 
   // Single-value containers also carried a zero-length byte in <=1.21.4.
@@ -108,12 +146,11 @@ export function patchPaletteContainerSource (input) {
   const required = [
     /this\.noSizePrefix = options\?\.noSizePrefix/,
     /if \(!this\.noSizePrefix\) varInt\.write\(smartBuffer, this\.data\.length\(\)\)/,
-    /Math\.ceil\(this\.data\.capacity \/ Math\.floor\(64 \/ bitsPerValue\)\)/,
     /if \(!this\.noSizePrefix\) smartBuffer\.writeUInt8\(0\)/,
   ]
   for (const pattern of required) if (!pattern.test(source)) throw new Error(`${PATCH_ID}: PaletteContainer invariant missing: ${pattern}`)
-  const computedReads = (source.match(/this\.noSizePrefix\s*\n\s*\? Math\.ceil\(this\.data\.capacity \/ Math\.floor\(64 \/ bitsPerValue\)\)/g) || []).length
-  if (computedReads !== readBufferMethods) throw new Error(`${PATCH_ID}: PaletteContainer must patch every discovered readBuffer path; methods=${readBufferMethods}, computed=${computedReads}`)
+  const markerCount = (source.match(new RegExp(`HEM ${PATCH_ID}: fixed 1\\.21\\.5 packed-long count`, 'g')) || []).length
+  if (markerCount !== patchedMethods) throw new Error(`${PATCH_ID}: PaletteContainer must patch every discovered readBuffer path; methods=${patchedMethods}, markers=${markerCount}`)
   return source
 }
 
@@ -226,7 +263,7 @@ export function patchChunkColumnSource (input) {
     source = replaceOnce(
       source,
       /(module\.exports = \(Block, mcData\) => \{\s*\n)/,
-      "$1  // HEM hem-prismarine-chunk-1215-nosize-v3: 1.21.5+ omits palette data length prefixes.\n  const noSizePrefix = mcData.version['>=']('1.21.5')\n",
+      "$1  // HEM hem-prismarine-chunk-1215-nosize-v4: 1.21.5+ omits palette data length prefixes.\n  const noSizePrefix = mcData.version['>=']('1.21.5')\n",
       'ChunkColumn 1.21.5 noSizePrefix version gate'
     )
   }
@@ -235,7 +272,7 @@ export function patchChunkColumnSource (input) {
   source = source.replace(/new ChunkSection\(\{(?![^}]*\bnoSizePrefix\b)/g, 'new ChunkSection({ noSizePrefix,')
   source = source.replace(/new BiomeSection\(\{(?![^}]*\bnoSizePrefix\b)/g, 'new BiomeSection({ noSizePrefix,')
 
-  // Network decode carries the critical live fix first isolated in RC22; RC24 patches only prismarine-chunk package roots that are actually reachable from runtime consumers.
+  // Network decode carries the critical live fix first isolated in RC22; RC25 patches only prismarine-chunk package roots that are actually reachable from runtime consumers.
   source = source.replace(/ChunkSection\.read\(reader, this\.maxBitsPerBlock\)(?![,\w])/, 'ChunkSection.read(reader, this.maxBitsPerBlock, noSizePrefix)')
   source = source.replace(/BiomeSection\.read\(reader, this\.maxBitsPerBiome\)(?![,\w])/, 'BiomeSection.read(reader, this.maxBitsPerBiome, noSizePrefix)')
 
@@ -285,8 +322,8 @@ export async function patchPackageRoot (packageRoot) {
   if (sizing.blocks5Bits !== 342 || sizing.biomes3Bits !== 4) throw new Error(`${PATCH_ID}: packed-long sizing invariant failed: ${JSON.stringify(sizing)}`)
 
   const decoderPaths = {
-    readBufferMethods: (paletteContainerAfter.match(/readBuffer\s*\(smartBuffer,\s*bitsPerValue\)\s*\{/g) || []).length,
-    computedReadPaths: (paletteContainerAfter.match(/this\.noSizePrefix\s*\n\s*\? Math\.ceil\(this\.data\.capacity \/ Math\.floor\(64 \/ bitsPerValue\)\)/g) || []).length,
+    readBufferMethods: (paletteContainerAfter.match(/readBuffer\s*\(\s*smartBuffer\s*,\s*[A-Za-z_$][\w$]*\s*\)\s*\{/g) || []).length,
+    computedReadPaths: (paletteContainerAfter.match(new RegExp(`HEM ${PATCH_ID}: fixed 1\\.21\\.5 packed-long count`, 'g')) || []).length,
   }
   if (decoderPaths.readBufferMethods < 1 || decoderPaths.computedReadPaths !== decoderPaths.readBufferMethods) throw new Error(`${PATCH_ID}: decoder-path attestation mismatch ${JSON.stringify(decoderPaths)}`)
 
