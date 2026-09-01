@@ -10,7 +10,7 @@ import {
 } from '../apps/client/patch-prismarine-chunk-1215.mjs'
 
 test('1.21.5 fixed palette sizing uses Mojang non-spanning long count', () => {
-  assert.equal(PATCH_ID, 'hem-prismarine-chunk-1215-nosize-v1')
+  assert.equal(PATCH_ID, 'hem-prismarine-chunk-1215-nosize-v2')
   assert.equal(packedLongCount(4096, 4), 256)
   assert.equal(packedLongCount(4096, 5), 342)
   assert.equal(packedLongCount(4096, 6), 410)
@@ -21,7 +21,7 @@ test('1.21.5 fixed palette sizing uses Mojang non-spanning long count', () => {
   assert.equal(Math.ceil(64 * 3 / 64), 3)
 })
 
-test('RC22 patch upgrades legacy palette containers to no-size-prefix reads and writes', () => {
+test('RC23 patch upgrades legacy palette containers to no-size-prefix reads and writes', () => {
   const legacy = `
 const BitArray = require('./BitArrayNoSpan')
 const constants = require('./constants')
@@ -92,7 +92,7 @@ class SingleValueContainer {
   assert.match(patched, /convertToDirect[\s\S]*?noSizePrefix: this\.noSizePrefix/)
 })
 
-test('RC22 patch threads 1.21.5 no-size-prefix through block and biome chunk decoders', () => {
+test('RC23 patch threads 1.21.5 no-size-prefix through block and biome chunk decoders', () => {
   const biomeLegacy = `
 const constants = require('./constants')
 const paletteContainer = require('./PaletteContainer')
@@ -253,4 +253,110 @@ module.exports = (Block, mcData) => {
   assert.match(column, /mcData\.version\['>='\]\('1\.21\.5'\)/)
   assert.match(column, /ChunkSection\.read\(reader, this\.maxBitsPerBlock, noSizePrefix\)/)
   assert.match(column, /BiomeSection\.read\(reader, this\.maxBitsPerBiome, noSizePrefix\)/)
+})
+
+test('RC23 patch accepts a historical PaletteContainer with one shared readBuffer path', () => {
+  const legacy = `
+const BitArray = require('./BitArrayNoSpan')
+const constants = require('./constants')
+const varInt = require('./varInt')
+class DirectPaletteContainer {
+  constructor (options) {
+    this.data = new BitArray({ bitsPerValue: options?.bitsPerValue, capacity: options?.capacity })
+  }
+  write (smartBuffer) {
+    smartBuffer.writeUInt8(this.data.bitsPerValue)
+    varInt.write(smartBuffer, this.data.length())
+    this.data.writeBuffer(smartBuffer)
+  }
+  readBuffer (smartBuffer, bitsPerValue) {
+    const longs = varInt.read(smartBuffer)
+    this.data.readBuffer(smartBuffer, longs * 2)
+    return this
+  }
+}
+class IndirectPaletteContainer {
+  constructor (options) {
+    this.data = options?.data ?? new BitArray({ bitsPerValue: options?.bitsPerValue, capacity: options?.capacity })
+    this.palette = options?.palette ?? [0]
+  }
+  set (index, value) { return this }
+  convertToDirect (bitsPerValue) {
+    return new DirectPaletteContainer({ bitsPerValue, capacity: this.data.capacity })
+  }
+  write (smartBuffer) {
+    smartBuffer.writeUInt8(this.data.bitsPerValue)
+    varInt.write(smartBuffer, this.palette.length)
+    for (const value of this.palette) varInt.write(smartBuffer, value)
+    varInt.write(smartBuffer, this.data.length())
+    this.data.writeBuffer(smartBuffer)
+  }
+}
+class SingleValueContainer {
+  constructor (options) {
+    this.value = options?.value ?? 0
+  }
+  set (index, value) {
+    if (value === this.value) return this
+    return new IndirectPaletteContainer({ palette: [this.value, value] })
+  }
+  write (smartBuffer) {
+    smartBuffer.writeUInt8(0)
+    varInt.write(smartBuffer, this.value)
+    smartBuffer.writeUInt8(0)
+  }
+}
+`
+  const patched = patchPaletteContainerSource(legacy)
+  assert.equal((patched.match(/readBuffer\s*\(smartBuffer,\s*bitsPerValue\)\s*\{/g) || []).length, 1)
+  assert.equal((patched.match(/this\.noSizePrefix\s*\n\s*\? Math\.ceil\(this\.data\.capacity \/ Math\.floor\(64 \/ bitsPerValue\)\)/g) || []).length, 1)
+})
+
+test('RC23 patch fails closed when any discovered readBuffer path is left legacy', () => {
+  const legacy = `
+const BitArray = require('./BitArrayNoSpan')
+const constants = require('./constants')
+const varInt = require('./varInt')
+class DirectPaletteContainer {
+  constructor (options) {
+    this.data = new BitArray({ bitsPerValue: options?.bitsPerValue, capacity: options?.capacity })
+  }
+  write (smartBuffer) {
+    varInt.write(smartBuffer, this.data.length())
+    this.data.writeBuffer(smartBuffer)
+  }
+  readBuffer (smartBuffer, bitsPerValue) {
+    const longs = varInt.read(smartBuffer)
+    this.data.readBuffer(smartBuffer, longs * 2)
+    return this
+  }
+}
+class IndirectPaletteContainer {
+  constructor (options) {
+    this.data = new BitArray({ bitsPerValue: options?.bitsPerValue, capacity: options?.capacity })
+  }
+  set (index, value) { return this }
+  convertToDirect (bitsPerValue) { return new DirectPaletteContainer({ bitsPerValue, capacity: this.data.capacity }) }
+  write (smartBuffer) {
+    varInt.write(smartBuffer, this.data.length())
+    this.data.writeBuffer(smartBuffer)
+  }
+  readBuffer (smartBuffer, bitsPerValue) {
+    const wordCount = varInt.read(smartBuffer)
+    this.data.readBuffer(smartBuffer, wordCount * 2)
+    return this
+  }
+}
+class SingleValueContainer {
+  constructor (options) {
+    this.value = options?.value ?? 0
+  }
+  set (index, value) { return new IndirectPaletteContainer({}) }
+  write (smartBuffer) {
+    varInt.write(smartBuffer, this.value)
+    smartBuffer.writeUInt8(0)
+  }
+}
+`
+  assert.throws(() => patchPaletteContainerSource(legacy), /must patch every discovered readBuffer path/)
 })

@@ -1,12 +1,12 @@
-# HEM RC22 verification record
+# HEM RC23 verification record
 
-Date: 2026-08-31
+Date: 2026-09-01
 
 ## Completed in the build sandbox
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **93/93 passing** source/logic/security/release-gate tests in the current RC22 local pass.
+- `npm test`: **95/95 passing** source/logic/security/release-gate tests in the current RC23 local pass.
 - `npm run verify`: **55/55 release contracts passing**.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
@@ -99,13 +99,12 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - Release contracts require both the persistent drag counter and the before/after Playwright assertion, preventing regression back to the false-negative signal.
 
 
-## RC22 Minecraft 1.21.5 chunk-palette decoder hotfix
+## RC23 Minecraft 1.21.5 chunk-palette decoder patcher correction
 
-- RC21's manifest-verified GitHub run reached a ready Paper 1.21.5 shared world and real browser chunk streaming. The browser then failed repeatedly in `BiomeSection.read` / `ChunkColumn.load` with `VarInt is too big` and SmartBuffer target-offset errors before the later custom-skin gate could complete. This is live evidence of a decoder desynchronization, not a packaging or launcher false negative.
-- Minecraft 1.21.5 paletted block/biome data arrays omit the legacy VarInt array-length prefix. For the non-spanning 64-bit storage used by these containers, the decoder must compute `ceil(entryCount / floor(64 / bitsPerValue))` words. RC22 locks two sentinels: 4096 block entries at 5 bits require **342** longs, while 64 biome entries at 3 bits require **4**.
-- RC22 preserves the exact minecraft-web-client v0.1.99 commit `0359f20b8d721ea44c7ddb633c985a71574c73d3` and its frozen dependency graph. Immediately after the frozen install, `apps/client/patch-prismarine-chunk-1215.mjs` patches the installed historical `prismarine-chunk` source to thread `noSizePrefix` through block + biome containers and ChunkColumn decode/write construction. The script fails closed on unrecognized source shape and records before/after SHA-256 metadata in `.hem-prismarine-chunk-1215.json`; the report is embedded in `hem-build.json`.
-- System Acceptance, final certification and production deployment all require patch ID `hem-prismarine-chunk-1215-nosize-v1`. This keeps the fix auditable without replacing the frozen dependency graph with moving packages.
-- Source-side verification after this change is **93/93 tests** and **55/55 release contracts**. The decoder fix is **not yet live-proven**; the next exact GitHub System Acceptance run must get through real chunk loading and the remaining 163 gameplay/client gates before any PARTIAL row is promoted.
+- Minecraft 1.21.5 paletted block/biome data arrays omit the legacy VarInt array-length prefix. For the non-spanning 64-bit storage used by these containers, the decoder must compute `ceil(entryCount / floor(64 / bitsPerValue))` words. The locked sentinels remain 4096 block entries at 5 bits = **342** longs and 64 biome entries at 3 bits = **4**.
+- RC21 live evidence exposed the actual chunk-stream desynchronization. RC22 introduced the deterministic post-install correction, but its patcher then failed in GitHub Actions because it hard-coded an expectation of two `readBuffer` methods after patching while the exact frozen v0.1.99 `prismarine-chunk` snapshot exposed only one matching path.
+- RC23 changes that assertion from a guessed method count to structural coverage: count the `readBuffer(smartBuffer, bitsPerValue)` methods that actually exist in the installed snapshot, patch the legacy length-read forms, then require `computedReadPaths === readBufferMethods` and `readBufferMethods >= 1`. A one-path historical layout must produce 1/1; a two-path layout must produce 2/2; any unpatched discovered path fails closed.
+- The build report records `decoderPaths.readBufferMethods` and `decoderPaths.computedReadPaths` alongside file hashes and packed-size sentinels. System Acceptance, final certification and production deployment all require patch ID `hem-prismarine-chunk-1215-nosize-v2` plus matching decoder-path coverage. This keeps the compatibility fix auditable without replacing the frozen dependency graph with moving packages.
 
 ## RC21 checkout-integrity hotfix
 

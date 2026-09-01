@@ -6,7 +6,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const PATCH_ID = 'hem-prismarine-chunk-1215-nosize-v1'
+export const PATCH_ID = 'hem-prismarine-chunk-1215-nosize-v2'
 
 export function packedLongCount (capacity, bitsPerValue) {
   if (!Number.isInteger(capacity) || capacity <= 0) throw new Error(`invalid palette capacity ${capacity}`)
@@ -59,11 +59,22 @@ export function patchPaletteContainerSource (input) {
     '$1if (!this.noSizePrefix) varInt.write(smartBuffer, this.data.length())'
   )
 
-  // Direct + indirect reads: when the length prefix is absent, derive the number
-  // of 64-bit words using Mojang's non-spanning SimpleBitStorage sizing rule.
+  // Every readBuffer implementation that exists in the installed historical snapshot
+  // must switch from the legacy VarInt-prefixed array length to Mojang's 1.21.5+
+  // fixed non-spanning SimpleBitStorage sizing rule.  Older prismarine-chunk
+  // snapshots can expose one shared readBuffer path while newer snapshots expose
+  // separate direct + indirect paths, so the invariant is structural rather than
+  // a hard-coded count of two.
+  const readBufferMethods = (source.match(/readBuffer\s*\(smartBuffer,\s*bitsPerValue\)\s*\{/g) || []).length
+  if (readBufferMethods < 1) throw new Error(`${PATCH_ID}: PaletteContainer exposes no readBuffer methods; source shape is not recognized`)
   source = source.replace(
     /(^\s*)const longs = varInt\.read\(smartBuffer\)/gm,
     '$1const longs = this.noSizePrefix\n$1  ? Math.ceil(this.data.capacity / Math.floor(64 / bitsPerValue))\n$1  : varInt.read(smartBuffer)'
+  )
+  // Some historical snapshots inline the length read directly into readBuffer.
+  source = source.replace(
+    /(^\s*)this\.data\.readBuffer\(smartBuffer,\s*varInt\.read\(smartBuffer\)\s*\*\s*2\)/gm,
+    '$1const longs = this.noSizePrefix\n$1  ? Math.ceil(this.data.capacity / Math.floor(64 / bitsPerValue))\n$1  : varInt.read(smartBuffer)\n$1this.data.readBuffer(smartBuffer, longs * 2)'
   )
 
   // Older implementations occasionally used the mathematically-wrong ceil(n*b/64)
@@ -102,7 +113,7 @@ export function patchPaletteContainerSource (input) {
   ]
   for (const pattern of required) if (!pattern.test(source)) throw new Error(`${PATCH_ID}: PaletteContainer invariant missing: ${pattern}`)
   const computedReads = (source.match(/this\.noSizePrefix\s*\n\s*\? Math\.ceil\(this\.data\.capacity \/ Math\.floor\(64 \/ bitsPerValue\)\)/g) || []).length
-  if (computedReads < 2) throw new Error(`${PATCH_ID}: PaletteContainer must compute no-prefix word counts for both direct and indirect palettes; found ${computedReads}`)
+  if (computedReads !== readBufferMethods) throw new Error(`${PATCH_ID}: PaletteContainer must patch every discovered readBuffer path; methods=${readBufferMethods}, computed=${computedReads}`)
   return source
 }
 
@@ -215,7 +226,7 @@ export function patchChunkColumnSource (input) {
     source = replaceOnce(
       source,
       /(module\.exports = \(Block, mcData\) => \{\s*\n)/,
-      "$1  // HEM hem-prismarine-chunk-1215-nosize-v1: 1.21.5+ omits palette data length prefixes.\n  const noSizePrefix = mcData.version['>=']('1.21.5')\n",
+      "$1  // HEM hem-prismarine-chunk-1215-nosize-v2: 1.21.5+ omits palette data length prefixes.\n  const noSizePrefix = mcData.version['>=']('1.21.5')\n",
       'ChunkColumn 1.21.5 noSizePrefix version gate'
     )
   }
@@ -224,7 +235,7 @@ export function patchChunkColumnSource (input) {
   source = source.replace(/new ChunkSection\(\{(?![^}]*\bnoSizePrefix\b)/g, 'new ChunkSection({ noSizePrefix,')
   source = source.replace(/new BiomeSection\(\{(?![^}]*\bnoSizePrefix\b)/g, 'new BiomeSection({ noSizePrefix,')
 
-  // Network decode is the critical RC22 fix.
+  // Network decode carries the critical live fix first isolated in RC22; RC23 corrects patcher source-shape attestation.
   source = source.replace(/ChunkSection\.read\(reader, this\.maxBitsPerBlock\)(?![,\w])/, 'ChunkSection.read(reader, this.maxBitsPerBlock, noSizePrefix)')
   source = source.replace(/BiomeSection\.read\(reader, this\.maxBitsPerBiome\)(?![,\w])/, 'BiomeSection.read(reader, this.maxBitsPerBiome, noSizePrefix)')
 
@@ -256,10 +267,12 @@ export async function patchPackageRoot (packageRoot) {
     chunkColumn: patchChunkColumnSource,
   }
   const hashes = {}
+  let paletteContainerAfter = ''
   for (const [name, file] of Object.entries(files)) {
     const before = await fsp.readFile(file, 'utf8')
     const after = transforms[name](before)
     hashes[name] = { before: sha256(before), after: sha256(after), changed: before !== after }
+    if (name === 'paletteContainer') paletteContainerAfter = after
     await fsp.writeFile(file, after)
     execFileSync(process.execPath, ['--check', file], { stdio: 'pipe' })
   }
@@ -271,9 +284,15 @@ export async function patchPackageRoot (packageRoot) {
   }
   if (sizing.blocks5Bits !== 342 || sizing.biomes3Bits !== 4) throw new Error(`${PATCH_ID}: packed-long sizing invariant failed: ${JSON.stringify(sizing)}`)
 
+  const decoderPaths = {
+    readBufferMethods: (paletteContainerAfter.match(/readBuffer\s*\(smartBuffer,\s*bitsPerValue\)\s*\{/g) || []).length,
+    computedReadPaths: (paletteContainerAfter.match(/this\.noSizePrefix\s*\n\s*\? Math\.ceil\(this\.data\.capacity \/ Math\.floor\(64 \/ bitsPerValue\)\)/g) || []).length,
+  }
+  if (decoderPaths.readBufferMethods < 1 || decoderPaths.computedReadPaths !== decoderPaths.readBufferMethods) throw new Error(`${PATCH_ID}: decoder-path attestation mismatch ${JSON.stringify(decoderPaths)}`)
+
   let version = 'unknown'
   try { version = JSON.parse(await fsp.readFile(path.join(packageRoot, 'package.json'), 'utf8')).version || version } catch {}
-  return { patchId: PATCH_ID, packageVersion: version, sizing, files: hashes }
+  return { patchId: PATCH_ID, packageVersion: version, sizing, decoderPaths, files: hashes }
 }
 
 async function findPrismarineChunkRoots (upstreamRoot) {
