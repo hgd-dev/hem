@@ -101,6 +101,15 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 
 
 
+
+## RC28 registered resume-channel + long-lived proxy session repair
+
+- The RC27 live workflow passed `client.registry-renderer`, `client.capability-contract`, `world.seed-authority`, `client.settings-transport`, and `profile.remote-skins`, then failed waiting for Hudson's one-use resume lease while both browser WebSockets entered CLOSING/CLOSED state.
+- RC28 makes the browser call `registerChannel('hem:session', ['restBuffer', []], true)` before sending `/hem auth` or `/hem resume`, records registration in secret-free parity diagnostics, and listens to the named plugin-channel event while retaining raw `custom_payload` fallbacks.
+- HEMGate now delays lease generation until Paper reports `hem:session` in `Player#getListeningPluginChannels()`, retrying for a bounded four-second window instead of sending a one-use secret into an unregistered channel. A lease is generated only after the channel is ready.
+- The HEM websocket/TCP bridge no longer passes the former hard-coded `timeout: 30_000` option. Destination allowlisting remains unchanged; Minecraft protocol keepalives, browser disconnects, Paper shutdown, and HEM idle/world lifecycle remain the connection lifetime authorities. This is required for the real 60-minute soak rather than a 30-second transport cap.
+- System Acceptance now requires both browsers to report successful HEM channel registration and requires Hudson's first resume lease before later renderer/profile work, so a broken auth-session channel fails immediately and specifically.
+
 ## RC27 generated sound-map + HTTPS remote-skin acceptance repair
 
 - The RC26 live workflow proved the 1.21.5 chunk decoder path had advanced far enough for Paper to become ready and both browser players to launch. The next failures were concrete presentation-network prerequisites: `/sounds.js` returned HTTP 404 and the custom skin loader hit `ERR_SSL_PROTOCOL_ERROR`, so the reciprocal remote-skin gate timed out.

@@ -46,7 +46,7 @@ test('launch token is never placed in query string',()=>{
 })
 
 test('proxy is destination allowlisted to orchestrator ports',()=>{
-  const p=read('apps/proxy/server.cjs'); assert.match(p,/to:destinations/); assert.match(p,/host:HOST,port:START\+i/)
+  const p=read('apps/proxy/server.cjs'); assert.match(p,/to:destinations/); assert.match(p,/host:HOST,port:START\+i/); assert.doesNotMatch(p,/timeout:\s*30_000/)
 })
 
 test('hub UI exposes separate Singleplayer and Multiplayer lists',()=>{
@@ -342,7 +342,13 @@ test('browser refresh uses a bounded one-use resume lease without weakening laun
   assert.match(p,/resumeSessions\.remove\(token\)/)
   assert.match(p,/Base64\.getUrlEncoder\(\)\.withoutPadding\(\)/)
   assert.match(p,/registerOutgoingPluginChannel\(this, SESSION_CHANNEL\)/)
+  assert.match(p,/getListeningPluginChannels\(\)\.contains\(SESSION_CHANNEL\)/)
+  assert.match(p,/issueResumeSessionWhenListening/)
+  assert.match(p,/runTaskLater\(this, \(\) -> issueResumeSessionWhenListening/)
   assert.match(p,/sendPluginMessage\(this, SESSION_CHANNEL/)
+  assert.match(b,/registerChannel\('hem:session', \['restBuffer', \[\]\], true\)/)
+  assert.match(b,/client\.on\?\.\('hem:session'/)
+  assert.match(b,/channelRegistered/)
   assert.match(b,/sessionStorage\.setItem\(resumeKey, value\)/)
   assert.match(b,/\/hem resume \$\{resume\}/)
   assert.match(b,/history\.replaceState/)

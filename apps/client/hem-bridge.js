@@ -9,7 +9,7 @@
   // Expose a tiny read-only diagnostics surface for HEM's automated acceptance
   // runner. It deliberately contains no launch/resume secrets or profile credentials.
   const parity = {
-    hemVersion: '1.0.0-rc.27',
+    hemVersion: '1.0.0-rc.28',
     target: '1.21.5',
     connected: false,
     build: { checked: false, ok: false, compatibilityMode: '', upstreamRelease1215: null, protocolVerified1215: null, upstreamCommit: '' },
@@ -19,7 +19,7 @@
     entitiesSeen: new Set(),
     dimensionsSeen: new Set(),
     renderer: { checked: false, healthy: false, sections: 0 },
-    resume: { available: false, attempted: false, stored: false, received: 0 },
+    resume: { available: false, attempted: false, stored: false, received: 0, channelRegistered: false, channelRegistrationFailed: false },
     settingsRequested: {},
     packetsSeen: new Set(),
     presentation: { damageFlashes: 0, audioEvents: 0 },
@@ -226,8 +226,25 @@
         showFatal('authorization', 'The connection ended before HEM authorization completed. Return to the HEM world menu and launch again.')
       }
     })
-    bot._client?.on?.('custom_payload', captureResumePacket)
-    bot._client?.on?.('packet', (data, meta) => { if (meta?.name === 'custom_payload') captureResumePacket(data) })
+    const client = bot._client
+    if (client && !client.__hemResumeChannelRegistered && typeof client.registerChannel === 'function') {
+      try {
+        // Bukkit only considers a player to be listening to a custom plugin channel
+        // after the client sends minecraft:register. node-minecraft-protocol's
+        // registerChannel(..., true) performs that registration and also gives us a
+        // named raw-payload event, which is much more reliable than depending on the
+        // generic custom_payload event shape across historical protocol builds.
+        client.registerChannel('hem:session', ['restBuffer', []], true)
+        client.__hemResumeChannelRegistered = true
+        parity.resume.channelRegistered = true
+        client.on?.('hem:session', data => captureResumePacket({ channel: 'hem:session', data }))
+      } catch (error) {
+        parity.resume.channelRegistrationFailed = true
+        console.error('HEM could not register the resume plugin channel:', error)
+      }
+    }
+    client?.on?.('custom_payload', captureResumePacket)
+    client?.on?.('packet', (data, meta) => { if (meta?.name === 'custom_payload') captureResumePacket(data) })
     bot.on?.('customPayload', captureResumePacket)
   }
 

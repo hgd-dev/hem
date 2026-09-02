@@ -13,7 +13,7 @@ Status syntax is machine parsed. Only `OPEN` and `CLOSED` are valid. All four bl
 - OPEN production-r2-restore — On a disposable production-shaped host, upload a real backup to the configured Cloudflare R2 remote, restore it into an empty world volume, and verify native Paper world/player data before reconnecting clients.
 - OPEN household-manual-acceptance — Complete `docs/MANUAL_ACCEPTANCE.md` with both intended players across create/join/rejoin/save/restart/skin/settings flows and record the signed-off evidence.
 
-Current RC27 evidence note: RC26 advanced the real workflow beyond the historical chunk-decoder failure: Paper became ready and both Chromium clients reached live HEM settings transport. The next blockers were a missing upstream `/sounds.js` build artifact and remote custom-skin requests failing against the HTTP-only local skin stub. RC27 restores the upstream sound-map generation step with hashed build provenance and moves system custom skins onto a dedicated HTTPS test origin. The pinned-live and soak blockers remain OPEN until this exact build passes the full workflow.
+Current RC28 evidence note: RC27 advanced the real workflow through ready Paper 1.21.5, rendered chunk sections, the generated sound map/capability contract, seed authority, settings transport, and reciprocal remote custom skins. It then failed because the browser had not stored the short-lived resume lease and both WebSocket sessions closed. RC28 explicitly registers `hem:session`, delays server lease delivery until Paper sees that client registration, and removes HEM's hard-coded 30-second proxy bridge timeout. The pinned-live and soak blockers remain OPEN until this exact build passes the full workflow.
 
 ## Promotion rule
 

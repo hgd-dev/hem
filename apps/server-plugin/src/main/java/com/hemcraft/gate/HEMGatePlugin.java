@@ -184,6 +184,24 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
     }
 
     private void issueResumeSession(Player player, SessionLease source) {
+        issueResumeSessionWhenListening(player, source, 0);
+    }
+
+    private void issueResumeSessionWhenListening(Player player, SessionLease source, int attempt) {
+        if (!player.isOnline()) return;
+        // Modern clients advertise custom plugin channels with minecraft:register.
+        // HEM's browser bridge registers hem:session before sending /hem auth or
+        // /hem resume. Do not fire the one-use lease before Paper has observed that
+        // registration; doing so can lose the payload on historical web-client
+        // protocol builds and leaves refresh recovery impossible.
+        if (!player.getListeningPluginChannels().contains(SESSION_CHANNEL)) {
+            if (attempt < 40) {
+                Bukkit.getScheduler().runTaskLater(this, () -> issueResumeSessionWhenListening(player, source, attempt + 1), 2L);
+            } else {
+                getLogger().warning("Resume channel was not registered by " + player.getName() + "; no lease was issued.");
+            }
+            return;
+        }
         cleanupResumeSessions();
         byte[] random = new byte[32];
         secureRandom.nextBytes(random);

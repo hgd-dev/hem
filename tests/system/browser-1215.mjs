@@ -252,6 +252,16 @@ try {
   }
   pass('client.settings-transport', 'HEM video/input/audio settings transported into browser client launch')
 
+  // The browser must explicitly register HEM's raw plugin channel before the
+  // server can safely deliver the one-use resume lease. Prove both registration
+  // and delivery before spending time on later renderer/profile gates.
+  await waitFor(() => hudson.page.evaluate(() => Boolean(globalThis.__HEM_PARITY__?.resume?.channelRegistered)), 'Hudson registers HEM resume plugin channel', 10_000)
+  await waitFor(() => elise.page.evaluate(() => Boolean(globalThis.__HEM_PARITY__?.resume?.channelRegistered)), 'Elise registers HEM resume plugin channel', 10_000)
+  await waitFor(() => hudson.page.evaluate(() => {
+    const r = globalThis.__HEM_PARITY__?.resume
+    return Boolean(r?.stored && r.received >= 1)
+  }), 'Hudson receives short-lived resume lease', 20_000)
+
   // HEMGate applies profile textures after the one-use auth command. The plugin
   // re-announces that profile to already-connected players, and the browser must
   // actually request the other player's distinct skin URL. A registry property
@@ -264,10 +274,6 @@ try {
   // rotates a short-lived one-use resume lease through a private plugin channel so
   // a normal browser refresh can reauthorize without weakening launch-token replay
   // protection or putting credentials back into the URL.
-  await waitFor(() => hudson.page.evaluate(() => {
-    const r = globalThis.__HEM_PARITY__?.resume
-    return Boolean(r?.stored && r.received >= 1)
-  }), 'Hudson receives short-lived resume lease', 20_000)
   await hudson.page.reload({ waitUntil: 'domcontentloaded', timeout: 120_000 })
   await pageReady(hudson.page, H)
   await waitFor(() => hudson.page.evaluate(() => {
