@@ -1,4 +1,4 @@
-# HEM RC31 verification record
+# HEM RC32 verification record
 
 Date: 2026-09-02
 
@@ -6,7 +6,7 @@ Date: 2026-09-02
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **110/110 passing** source/logic/security/release-gate tests in the current RC31 local pass.
+- `npm test`: **111/111 passing** source/logic/security/release-gate tests in the current RC32 local pass.
 - `npm run verify`: **57/57 release contracts passing**.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
@@ -174,3 +174,12 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - Root-cause tracing found the RC30 browser started `/hem lease` in the same authorization tick as `/hem auth`/`/hem resume` and retried every 250 ms for up to 40 attempts. The server authorization is asynchronous, so this generated repeated signed command traffic before the current physical connection had been confirmed authorized and before Paper was guaranteed to expose `hem:session`.
 - RC31 waits for Paper's explicit `HEM: connected` / `HEM: resumed` confirmation before requesting a lease, then uses a bounded six-attempt 1.5-second retry cadence. The launch/resume credential path stays one-use and the lease request remains secret-free.
 - HEMGate now emits secret-free live diagnostics when `hem:session` is registered, when a lease request is waiting on channel registration, and when a lease is issued. The initial lease acceptance failure now prints browser authorization/resume state and the Paper log tail, matching the existing refresh-resume diagnostic path.
+
+## RC32 deterministic refresh / upstream service-worker isolation
+
+- The RC31 live two-browser run passed registry rendering, client capability/provenance, seed authority, settings transport, the initial short-lived resume-lease gate and reciprocal remote-skin rendering. It failed at the first explicit browser refresh: Playwright's `page.reload()` document request to the HEM client origin was aborted with `net::ERR_ABORTED; maybe frame was detached?` while the old game WebSocket was closing.
+- This moved the failure boundary beyond initial lease issuance and onto full-document navigation. The pinned minecraft-web-client production build exposes a supported `DISABLE_SERVICE_WORKER` switch; HEM had not set it, so the first refresh was also the point where a newly installed upstream PWA worker could begin controlling navigation.
+- RC32 changes one runtime variable: `apps/client/build-client.mjs` sets `DISABLE_SERVICE_WORKER=true` before the pinned upstream production build. The RC31 authorization-confirmed lease request, connection-scoped authorization and no-trailing-NUL REGISTER repair remain unchanged.
+- `hem-build.json` now attests `serviceWorkerDisabled: true`, and `npm run doctor:system`, HEM CI, live System Acceptance and production Cloudflare deployment all reject a browser artifact missing that attestation. A dedicated regression test fails if the build stops enforcing the upstream no-service-worker switch.
+- Live refresh recovery remains unclaimed until the exact RC32 artifact passes the two-browser Paper 1.21.5 workflow.
+

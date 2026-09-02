@@ -262,6 +262,11 @@ const generatedSoundMapSha256 = createHash('sha256').update(generatedSoundMapByt
 console.log(`HEM sound map generated at ${generatedSoundMapSource} (${generatedSoundMapBytes.length} bytes, sha256 ${generatedSoundMapSha256})`)
 
 pnpm(['prepare-project'])
+// HEM serves versioned release artifacts and needs browser refresh/reconnect to be
+// a single deterministic document navigation. The pinned upstream PWA worker can
+// take control on the first reload and supersede that navigation, so use upstream's
+// supported production switch to omit it from the HEM bundle.
+process.env.DISABLE_SERVICE_WORKER = 'true'
 pnpm(['build'])
 
 const built = path.join(upstream, 'dist')
@@ -299,7 +304,7 @@ delete config.defaultProxy
 await fsp.writeFile(configPath, JSON.stringify(config, null, 2) + '\n')
 
 await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
-  hemVersion: '1.0.0-rc.31',
+  hemVersion: '1.0.0-rc.32',
   minecraft: '1.21.5',
   upstreamRepo: repo,
   upstreamRef: ref,
@@ -313,6 +318,7 @@ await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
   upstreamLockSha256,
   pnpmVersion,
   frozenLockfile: true,
+  serviceWorkerDisabled: true,
   soundMap: { source: generatedSoundMapSource, sha256: generatedSoundMapSha256, bytes: generatedSoundMapBytes.length, path: '/sounds.js' },
   prismarineChunkPatch,
   minecraftProtocolRegisterPatch,

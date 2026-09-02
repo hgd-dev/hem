@@ -227,6 +227,7 @@ try {
   if (!/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamSupportedVersionsSha256 || '')) throw new Error('Built browser client is missing upstream supportedVersions source hash')
   if (!/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamPackageSha256 || '') || !/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamLockSha256 || '')) throw new Error('Built browser client is missing frozen v0.1.99 package/lock provenance')
   if (liveBuildIdentity.frozenLockfile !== true) throw new Error('Built browser client did not use the pinned v0.1.99 frozen lockfile')
+  if (liveBuildIdentity.serviceWorkerDisabled !== true) throw new Error('HEM browser build must disable the upstream service worker for deterministic refresh/reconnect')
   if (liveBuildIdentity.compatibilityMode !== 'pinned-v0.1.99-lockfile-1215-verified' || liveBuildIdentity.protocolVerified1215 !== true) throw new Error(`HEM 1.21.5 requires pinned v0.1.99 frozen dependencies plus verified protocol/data; got ${liveBuildIdentity.compatibilityMode}`)
   const soundMapBytes = await fs.readFile('apps/client/dist/sounds.js')
   const soundMapSha256 = createHash('sha256').update(soundMapBytes).digest('hex')
