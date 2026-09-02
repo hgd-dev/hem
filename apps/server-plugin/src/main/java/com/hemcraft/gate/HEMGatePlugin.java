@@ -23,6 +23,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRegisterChannelEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import com.destroystokyo.paper.profile.PlayerProfile;
@@ -207,6 +208,9 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
         SessionLease source = activeSessions.get(player.getUniqueId());
         if (source == null || source.expiresAt() < System.currentTimeMillis() || !source.username().equalsIgnoreCase(player.getName())) return;
         pendingLeaseRequests.add(player);
+        if (!player.getListeningPluginChannels().contains(SESSION_CHANNEL)) {
+            getLogger().info("Resume lease request waiting for channel registration from " + player.getName());
+        }
         issueResumeSessionWhenListening(player, source, 0);
     }
 
@@ -235,6 +239,7 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
             SessionLease existing = resumeSessions.get(existingToken);
             if (existing != null && existing.expiresAt() >= System.currentTimeMillis() && existing.username().equalsIgnoreCase(player.getName())) {
                 player.sendPluginMessage(this, SESSION_CHANNEL, existingToken.getBytes(StandardCharsets.UTF_8));
+                getLogger().info("Resume lease issued to " + player.getName() + " using existing active token");
                 pendingLeaseRequests.remove(player);
                 return;
             }
@@ -249,6 +254,7 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
         resumeSessions.put(token, rotated);
         activeResumeTokens.put(playerKey, token);
         player.sendPluginMessage(this, SESSION_CHANNEL, token.getBytes(StandardCharsets.UTF_8));
+        getLogger().info("Resume lease issued to " + player.getName());
         pendingLeaseRequests.remove(player);
     }
 
@@ -306,6 +312,9 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
         http.sendAsync(req, HttpResponse.BodyHandlers.discarding()).exceptionally(ex -> null);
     }
 
+    @EventHandler public void onRegisterChannel(PlayerRegisterChannelEvent e) {
+        if (SESSION_CHANNEL.equals(e.getChannel())) getLogger().info("Resume channel registered by " + e.getPlayer().getName());
+    }
     @EventHandler public void onQuit(PlayerQuitEvent e) { pendingLeaseRequests.remove(e.getPlayer()); if (authenticated.remove(e.getPlayer())) postPresence(e.getPlayer(), false); }
     @EventHandler(ignoreCancelled=true, priority=EventPriority.LOWEST) public void onMove(PlayerMoveEvent e) { if (!locked(e.getPlayer()) || e.getTo()==null) return; Location f=e.getFrom(),t=e.getTo(); if (f.getX()!=t.getX()||f.getY()!=t.getY()||f.getZ()!=t.getZ()) e.setTo(new Location(f.getWorld(),f.getX(),f.getY(),f.getZ(),t.getYaw(),t.getPitch())); }
     @EventHandler(ignoreCancelled=true, priority=EventPriority.LOWEST) public void onBreak(BlockBreakEvent e){if(locked(e.getPlayer()))e.setCancelled(true);}

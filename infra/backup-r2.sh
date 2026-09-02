@@ -37,7 +37,7 @@ STOPPED=1
 docker run --rm -v "$WORLD_VOLUME:/worlds:ro" -v "$TMP:/backup" alpine:3.22 \
   sh -eu -c 'cd /worlds && tar -czf /backup/hem-worlds.tar.gz .'
 (cd "$TMP" && sha256sum hem-worlds.tar.gz > hem-worlds.tar.gz.sha256)
-printf 'HEM backup UTC: %s\nHEM: 1.0.0-rc.30\nPaper: 1.21.5 build 114\n' "$STAMP" > "$TMP/README.txt"
+printf 'HEM backup UTC: %s\nHEM: 1.0.0-rc.31\nPaper: 1.21.5 build 114\n' "$STAMP" > "$TMP/README.txt"
 
 # Upload, then independently compare the remote objects before restarting HEM.
 rclone copy "$TMP/" "$RCLONE_REMOTE/$STAMP/"

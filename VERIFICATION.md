@@ -1,4 +1,4 @@
-# HEM RC30 verification record
+# HEM RC31 verification record
 
 Date: 2026-09-02
 
@@ -6,7 +6,7 @@ Date: 2026-09-02
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **109/109 passing** source/logic/security/release-gate tests in the current RC30 local pass.
+- `npm test`: **110/110 passing** source/logic/security/release-gate tests in the current RC31 local pass.
 - `npm run verify`: **57/57 release contracts passing**.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
@@ -167,3 +167,10 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 
 - RC18 reached the live system stack but the orchestrator container exited before binding port 3000. `apps/orchestrator/server.mjs` imports `world-config.mjs` and `world-version.mjs`; RC18's Dockerfile copied only `server.mjs`, so Node could not resolve those local runtime modules inside the image.
 - RC19 copies both imported modules into `/opt/hem` alongside `server.mjs`. A regression test derives the local imports from `server.mjs` and requires matching Dockerfile `COPY` directives, while the release verifier independently checks both modules are shipped.
+
+## RC31 authorization-confirmed lease-request repair
+
+- The RC30 live two-browser run passed registry rendering, client capability/provenance, seed authority and settings transport, then timed out waiting for Hudson's initial short-lived resume lease while both browsers logged WebSocket `CLOSING or CLOSED` errors.
+- Root-cause tracing found the RC30 browser started `/hem lease` in the same authorization tick as `/hem auth`/`/hem resume` and retried every 250 ms for up to 40 attempts. The server authorization is asynchronous, so this generated repeated signed command traffic before the current physical connection had been confirmed authorized and before Paper was guaranteed to expose `hem:session`.
+- RC31 waits for Paper's explicit `HEM: connected` / `HEM: resumed` confirmation before requesting a lease, then uses a bounded six-attempt 1.5-second retry cadence. The launch/resume credential path stays one-use and the lease request remains secret-free.
+- HEMGate now emits secret-free live diagnostics when `hem:session` is registered, when a lease request is waiting on channel registration, and when a lease is issued. The initial lease acceptance failure now prints browser authorization/resume state and the Paper log tail, matching the existing refresh-resume diagnostic path.

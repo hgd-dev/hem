@@ -9,7 +9,7 @@
   // Expose a tiny read-only diagnostics surface for HEM's automated acceptance
   // runner. It deliberately contains no launch/resume secrets or profile credentials.
   const parity = {
-    hemVersion: '1.0.0-rc.30',
+    hemVersion: '1.0.0-rc.31',
     target: '1.21.5',
     connected: false,
     build: { checked: false, ok: false, compatibilityMode: '', upstreamRelease1215: null, protocolVerified1215: null, upstreamCommit: '' },
@@ -191,14 +191,14 @@
       attempts++
       parity.resume.leaseRequests++
       bot.chat('/hem lease')
-      if (attempts >= 40) {
+      if (attempts >= 6) {
         if (leaseRequestTimer) clearInterval(leaseRequestTimer)
         leaseRequestTimer = null
-        console.error('HEM resume lease request timed out after authorization attempt')
+        console.error('HEM resume lease request timed out after confirmed authorization')
       }
     }
     request()
-    if (!parity.resume.stored && attempts < 40) leaseRequestTimer = setInterval(request, 250)
+    if (!parity.resume.stored && attempts < 6) leaseRequestTimer = setInterval(request, 1500)
   }
 
   const attachDiagnostics = bot => {
@@ -231,6 +231,14 @@
       tone(520, .045, .012)
       const text = typeof message?.toString === 'function' ? message.toString() : String(message || '')
       parity.recentMessages.push(text); if (parity.recentMessages.length > 50) parity.recentMessages.shift()
+      // Paper sends this only after the launch/resume credential has been accepted
+      // on the current physical connection. Start the secret-free lease request
+      // from that confirmation instead of racing the asynchronous authorization.
+      if (/HEM:\s+(?:connected|resumed)\s+to\b/i.test(text)) {
+        parity.authorization.authenticated = true
+        parity.authorization.failed = false
+        requestResumeLease(bot)
+      }
     })
     bot.on?.('playerJoined', () => { parity.multiplayerEvents.joined++ })
     bot.on?.('playerLeft', () => { parity.multiplayerEvents.left++ })
@@ -291,7 +299,6 @@
         // diagnostics, localStorage, query parameters, or logs.
         history.replaceState(null, '', location.pathname + location.search)
         bot.chat(`/hem auth ${token}`)
-        requestResumeLease(bot)
       } else {
         const resume = readResume()
         if (resume) {
@@ -300,7 +307,6 @@
           parity.authorization.mode = 'resume'
           parity.authorization.attempted = true
           bot.chat(`/hem resume ${resume}`)
-          requestResumeLease(bot)
         }
       }
     }

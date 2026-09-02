@@ -257,10 +257,26 @@ try {
   // and delivery before spending time on later renderer/profile gates.
   await waitFor(() => hudson.page.evaluate(() => Boolean(globalThis.__HEM_PARITY__?.resume?.channelRegistered)), 'Hudson registers HEM resume plugin channel', 10_000)
   await waitFor(() => elise.page.evaluate(() => Boolean(globalThis.__HEM_PARITY__?.resume?.channelRegistered)), 'Elise registers HEM resume plugin channel', 10_000)
-  await waitFor(() => hudson.page.evaluate(() => {
-    const r = globalThis.__HEM_PARITY__?.resume
-    return Boolean(r?.stored && r.received >= 1)
-  }), 'Hudson receives short-lived resume lease', 20_000)
+  try {
+    await waitFor(() => hudson.page.evaluate(() => {
+      const r = globalThis.__HEM_PARITY__?.resume
+      return Boolean(r?.stored && r.received >= 1)
+    }), 'Hudson receives short-lived resume lease', 20_000)
+  } catch (error) {
+    const diagnostic = await hudson.page.evaluate(() => {
+      const p = globalThis.__HEM_PARITY__ || {}
+      return {
+        connected: p.connected === true,
+        authorization: p.authorization || {},
+        resume: p.resume || {},
+        recentMessages: Array.isArray(p.recentMessages) ? p.recentMessages.slice(-8) : [],
+      }
+    }).catch(() => ({ unavailable: true }))
+    console.error('Hudson initial resume lease diagnostics:', JSON.stringify(diagnostic))
+    const paperTail = await recentLogs(SHARED, 120).catch(() => [])
+    console.error('Hudson initial resume lease Paper tail\n' + paperTail.slice(-60).join('\n'))
+    throw error
+  }
 
   // HEMGate applies profile textures after the one-use auth command. The plugin
   // re-announces that profile to already-connected players, and the browser must
