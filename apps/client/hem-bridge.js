@@ -9,7 +9,7 @@
   // Expose a tiny read-only diagnostics surface for HEM's automated acceptance
   // runner. It deliberately contains no launch/resume secrets or profile credentials.
   const parity = {
-    hemVersion: '1.0.0-rc.29',
+    hemVersion: '1.0.0-rc.30',
     target: '1.21.5',
     connected: false,
     build: { checked: false, ok: false, compatibilityMode: '', upstreamRelease1215: null, protocolVerified1215: null, upstreamCommit: '' },
@@ -19,7 +19,7 @@
     entitiesSeen: new Set(),
     dimensionsSeen: new Set(),
     renderer: { checked: false, healthy: false, sections: 0 },
-    resume: { available: false, attempted: false, stored: false, received: 0, channelRegistered: false, channelRegistrationFailed: false },
+    resume: { available: false, attempted: false, stored: false, received: 0, leaseRequests: 0, channelRegistered: false, channelRegistrationFailed: false },
     settingsRequested: {},
     packetsSeen: new Set(),
     presentation: { damageFlashes: 0, audioEvents: 0 },
@@ -159,6 +159,7 @@
   }
 
   let lastResumeToken = ''
+  let leaseRequestTimer = null
   const captureResumePacket = packet => {
     const channel = packet?.channel || packet?.channelName || packet?.tag || ''
     if (channel !== 'hem:session') return
@@ -170,11 +171,34 @@
       parity.resume.available = true
       parity.resume.stored = true
       parity.resume.received++
+      if (leaseRequestTimer) { clearInterval(leaseRequestTimer); leaseRequestTimer = null }
       parity.authorization.authenticated = true
       parity.authorization.failed = false
     } catch (error) {
       console.error('HEM could not store the short-lived resume session:', error)
     }
+  }
+
+  const requestResumeLease = bot => {
+    if (leaseRequestTimer || parity.resume.stored || !bot?.entity || typeof bot.chat !== 'function') return
+    let attempts = 0
+    const request = () => {
+      if (parity.resume.stored || !globalThis.bot?.entity) {
+        if (leaseRequestTimer) clearInterval(leaseRequestTimer)
+        leaseRequestTimer = null
+        return
+      }
+      attempts++
+      parity.resume.leaseRequests++
+      bot.chat('/hem lease')
+      if (attempts >= 40) {
+        if (leaseRequestTimer) clearInterval(leaseRequestTimer)
+        leaseRequestTimer = null
+        console.error('HEM resume lease request timed out after authorization attempt')
+      }
+    }
+    request()
+    if (!parity.resume.stored && attempts < 40) leaseRequestTimer = setInterval(request, 250)
   }
 
   const attachDiagnostics = bot => {
@@ -221,6 +245,7 @@
     })
     bot.on?.('end', () => {
       parity.connected = false
+      if (leaseRequestTimer) { clearInterval(leaseRequestTimer); leaseRequestTimer = null }
       if (parity.authorization.attempted && !parity.authorization.authenticated) {
         parity.authorization.failed = true
         showFatal('authorization', 'The connection ended before HEM authorization completed. Return to the HEM world menu and launch again.')
@@ -266,6 +291,7 @@
         // diagnostics, localStorage, query parameters, or logs.
         history.replaceState(null, '', location.pathname + location.search)
         bot.chat(`/hem auth ${token}`)
+        requestResumeLease(bot)
       } else {
         const resume = readResume()
         if (resume) {
@@ -274,6 +300,7 @@
           parity.authorization.mode = 'resume'
           parity.authorization.attempted = true
           bot.chat(`/hem resume ${resume}`)
+          requestResumeLease(bot)
         }
       }
     }

@@ -36,6 +36,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -45,8 +48,11 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
     private static final String SESSION_CHANNEL = "hem:session";
     private static final long RESUME_TTL_MS = 5 * 60 * 1000L;
 
-    private final Set<UUID> authenticated = ConcurrentHashMap.newKeySet();
+    private final Set<Player> authenticated = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Set<Player> pendingLeaseRequests = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Map<UUID, SessionLease> activeSessions = new ConcurrentHashMap<>();
     private final Map<String, SessionLease> resumeSessions = new ConcurrentHashMap<>();
+    private final Map<String, String> activeResumeTokens = new ConcurrentHashMap<>();
     private final SecureRandom secureRandom = new SecureRandom();
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     private String worldId;
@@ -86,15 +92,19 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
     @Override public void onDisable() {
         getServer().getMessenger().unregisterOutgoingPluginChannel(this, SESSION_CHANNEL);
         authenticated.clear();
+        pendingLeaseRequests.clear();
+        activeSessions.clear();
         resumeSessions.clear();
+        activeResumeTokens.clear();
     }
 
     private static String trimSlash(String s) { return s == null ? "" : s.replaceAll("/+$", ""); }
-    private boolean locked(Player p) { return !authenticated.contains(p.getUniqueId()); }
+    private boolean locked(Player p) { return !authenticated.contains(p); }
 
     @EventHandler(priority = EventPriority.LOWEST) public void onJoin(PlayerJoinEvent e) {
         Player p = e.getPlayer();
-        authenticated.remove(p.getUniqueId());
+        authenticated.remove(p);
+        pendingLeaseRequests.remove(p);
         p.setInvulnerable(true);
         p.setCollidable(false);
         p.sendMessage(ChatColor.GOLD + "HEM: authorizing this 1.21.5 world…");
@@ -105,12 +115,16 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
 
     @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player p)) return true;
+        if (args.length == 1 && args[0].equalsIgnoreCase("lease")) {
+            if (!locked(p)) requestResumeSession(p);
+            return true;
+        }
         if (args.length != 2) {
             p.sendMessage(ChatColor.RED + "Launch this world from HEM.");
             return true;
         }
         if (!locked(p)) return true;
-        String mode = args[0].toLowerCase();
+        String mode = args[0].toLowerCase(Locale.ROOT);
         String token = args[1];
         if (token.length() < 32 || token.length() > 256 || !token.matches("^[A-Za-z0-9_-]+$")) {
             p.kickPlayer("Invalid HEM session token.");
@@ -164,11 +178,17 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
             player.kickPlayer("HEM resume session expired. Return to the HEM world menu and launch again.");
             return;
         }
+        String playerKey = player.getName().toLowerCase(Locale.ROOT);
+        activeResumeTokens.remove(playerKey, token);
         completeAuthorization(player, lease, "resumed");
     }
 
     private void completeAuthorization(Player player, SessionLease lease, String verb) {
-        authenticated.add(player.getUniqueId());
+        SessionLease active = new SessionLease(
+            player.getName(), lease.displayName(), lease.skinModel(), lease.skinUrl(), lease.commandsAuthorized(), System.currentTimeMillis() + RESUME_TTL_MS
+        );
+        activeSessions.put(player.getUniqueId(), active);
+        authenticated.add(player);
         player.setInvulnerable(false);
         player.setCollidable(true);
         if (!lease.displayName().isBlank()) {
@@ -180,29 +200,46 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
 
         player.sendMessage(ChatColor.GREEN + "HEM: " + verb + " to " + worldId + ".");
         postPresence(player, true);
-        issueResumeSession(player, lease);
     }
 
-    private void issueResumeSession(Player player, SessionLease source) {
+    private void requestResumeSession(Player player) {
+        if (!player.isOnline() || locked(player) || pendingLeaseRequests.contains(player)) return;
+        SessionLease source = activeSessions.get(player.getUniqueId());
+        if (source == null || source.expiresAt() < System.currentTimeMillis() || !source.username().equalsIgnoreCase(player.getName())) return;
+        pendingLeaseRequests.add(player);
         issueResumeSessionWhenListening(player, source, 0);
     }
 
     private void issueResumeSessionWhenListening(Player player, SessionLease source, int attempt) {
-        if (!player.isOnline()) return;
-        // Modern clients advertise custom plugin channels with minecraft:register.
-        // HEM's browser bridge registers hem:session before sending /hem auth or
-        // /hem resume. Do not fire the one-use lease before Paper has observed that
-        // registration; doing so can lose the payload on historical web-client
-        // protocol builds and leaves refresh recovery impossible.
+        if (!player.isOnline() || locked(player)) {
+            pendingLeaseRequests.remove(player);
+            return;
+        }
+        // Lease issuance is deliberately client-requested after authorization. That
+        // makes the REGISTER -> auth/resume -> lease order causal on every physical
+        // connection instead of relying on Paper observing channel state at a lucky
+        // point during a browser refresh.
         if (!player.getListeningPluginChannels().contains(SESSION_CHANNEL)) {
             if (attempt < 40) {
                 Bukkit.getScheduler().runTaskLater(this, () -> issueResumeSessionWhenListening(player, source, attempt + 1), 2L);
             } else {
-                getLogger().warning("Resume channel was not registered by " + player.getName() + "; no lease was issued.");
+                pendingLeaseRequests.remove(player);
+                getLogger().warning("Resume channel was not registered by " + player.getName() + " after an explicit lease request.");
             }
             return;
         }
         cleanupResumeSessions();
+        String playerKey = player.getName().toLowerCase(Locale.ROOT);
+        String existingToken = activeResumeTokens.get(playerKey);
+        if (existingToken != null) {
+            SessionLease existing = resumeSessions.get(existingToken);
+            if (existing != null && existing.expiresAt() >= System.currentTimeMillis() && existing.username().equalsIgnoreCase(player.getName())) {
+                player.sendPluginMessage(this, SESSION_CHANNEL, existingToken.getBytes(StandardCharsets.UTF_8));
+                pendingLeaseRequests.remove(player);
+                return;
+            }
+            activeResumeTokens.remove(playerKey, existingToken);
+        }
         byte[] random = new byte[32];
         secureRandom.nextBytes(random);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(random);
@@ -210,12 +247,16 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
             player.getName(), source.displayName(), source.skinModel(), source.skinUrl(), source.commandsAuthorized(), System.currentTimeMillis() + RESUME_TTL_MS
         );
         resumeSessions.put(token, rotated);
+        activeResumeTokens.put(playerKey, token);
         player.sendPluginMessage(this, SESSION_CHANNEL, token.getBytes(StandardCharsets.UTF_8));
+        pendingLeaseRequests.remove(player);
     }
 
     private void cleanupResumeSessions() {
         long now = System.currentTimeMillis();
         resumeSessions.entrySet().removeIf(entry -> entry.getValue().expiresAt() < now);
+        activeResumeTokens.entrySet().removeIf(entry -> !resumeSessions.containsKey(entry.getValue()));
+        activeSessions.entrySet().removeIf(entry -> entry.getValue().expiresAt() < now);
     }
 
     private void applyHemSkin(Player player, String skinUrl, String skinModel) {
@@ -265,7 +306,7 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
         http.sendAsync(req, HttpResponse.BodyHandlers.discarding()).exceptionally(ex -> null);
     }
 
-    @EventHandler public void onQuit(PlayerQuitEvent e) { if (authenticated.remove(e.getPlayer().getUniqueId())) postPresence(e.getPlayer(), false); }
+    @EventHandler public void onQuit(PlayerQuitEvent e) { pendingLeaseRequests.remove(e.getPlayer()); if (authenticated.remove(e.getPlayer())) postPresence(e.getPlayer(), false); }
     @EventHandler(ignoreCancelled=true, priority=EventPriority.LOWEST) public void onMove(PlayerMoveEvent e) { if (!locked(e.getPlayer()) || e.getTo()==null) return; Location f=e.getFrom(),t=e.getTo(); if (f.getX()!=t.getX()||f.getY()!=t.getY()||f.getZ()!=t.getZ()) e.setTo(new Location(f.getWorld(),f.getX(),f.getY(),f.getZ(),t.getYaw(),t.getPitch())); }
     @EventHandler(ignoreCancelled=true, priority=EventPriority.LOWEST) public void onBreak(BlockBreakEvent e){if(locked(e.getPlayer()))e.setCancelled(true);}
     @EventHandler(ignoreCancelled=true, priority=EventPriority.LOWEST) public void onPlace(BlockPlaceEvent e){if(locked(e.getPlayer()))e.setCancelled(true);}
@@ -281,6 +322,6 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
     @EventHandler(ignoreCancelled=true, priority=EventPriority.LOWEST) public void onPreCommand(PlayerCommandPreprocessEvent e){
         if (!locked(e.getPlayer())) return;
         String message = e.getMessage().toLowerCase();
-        if (!message.startsWith("/hem auth ") && !message.startsWith("/hem resume ")) e.setCancelled(true);
+        if (!message.startsWith("/hem auth ") && !message.startsWith("/hem resume ") && !message.equals("/hem lease")) e.setCancelled(true);
     }
 }

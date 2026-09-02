@@ -1,6 +1,6 @@
 {
   "name": "hem",
-  "version": "1.0.0-rc.29",
+  "version": "1.0.0-rc.30",
   "private": true,
   "type": "module",
   "scripts": {

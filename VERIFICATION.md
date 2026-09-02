@@ -1,4 +1,4 @@
-# HEM RC29 verification record
+# HEM RC30 verification record
 
 Date: 2026-09-02
 
@@ -6,7 +6,7 @@ Date: 2026-09-02
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **103/103 passing** source/logic/security/release-gate tests in the current RC29 local pass.
+- `npm test`: **109/109 passing** source/logic/security/release-gate tests in the current RC30 local pass.
 - `npm run verify`: **57/57 release contracts passing**.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
@@ -101,6 +101,14 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 
 
 
+
+## RC30 refresh connection-identity + client-requested lease repair
+
+- The RC29 live workflow proved the first `hem:session` lease is delivered, then failed only after Hudson refreshed and waited for resume + rotated-lease storage.
+- Static lifecycle tracing found HEMGate authorization was stored as `Set<UUID>` and `PlayerQuitEvent` removed that UUID unconditionally. A refresh creates a new Player connection with the same UUID while the old connection is still tearing down, so a late old quit can deauthorize the replacement connection. RC30 stores authorization by Player object identity so old and new physical connections cannot erase each other's auth state.
+- Resume-lease issuance is now client-requested: after `/hem auth` or `/hem resume`, the bridge retries the secret-free `/hem lease` command until a lease arrives. Paper issues only after `hem:session` is actually listening; repeated requests are coalesced/idempotent and reuse the one active token instead of minting parallel valid leases. Consuming `/hem resume <token>` still removes that token before the next rotated lease is issued.
+- The live refresh gate now separates "stored lease was attempted" from "rotated lease was received" and dumps only secret-free parity state plus the Paper log tail on failure, so any remaining live defect is localized in the same CI step.
+- RC29's runtime-resolved no-trailing-NUL `minecraft-protocol` registration patch remains mandatory and unchanged.
 
 ## RC29 exact minecraft:register framing repair
 

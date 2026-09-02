@@ -276,10 +276,27 @@ try {
   // protection or putting credentials back into the URL.
   await hudson.page.reload({ waitUntil: 'domcontentloaded', timeout: 120_000 })
   await pageReady(hudson.page, H)
-  await waitFor(() => hudson.page.evaluate(() => {
-    const r = globalThis.__HEM_PARITY__?.resume
-    return Boolean(r?.attempted && r.stored && r.received >= 1)
-  }), 'Hudson refresh resumes and rotates lease', 30_000)
+  try {
+    await waitFor(() => hudson.page.evaluate(() => Boolean(globalThis.__HEM_PARITY__?.resume?.attempted)), 'Hudson refresh attempts stored lease', 15_000)
+    await waitFor(() => hudson.page.evaluate(() => {
+      const r = globalThis.__HEM_PARITY__?.resume
+      return Boolean(r?.stored && r.received >= 1)
+    }), 'Hudson refresh receives rotated lease', 30_000)
+  } catch (error) {
+    const diagnostic = await hudson.page.evaluate(() => {
+      const p = globalThis.__HEM_PARITY__ || {}
+      return {
+        connected: p.connected === true,
+        authorization: p.authorization || {},
+        resume: p.resume || {},
+        recentMessages: Array.isArray(p.recentMessages) ? p.recentMessages.slice(-8) : [],
+      }
+    }).catch(() => ({ unavailable: true }))
+    console.error('Hudson refresh resume diagnostics:', JSON.stringify(diagnostic))
+    const paperTail = await recentLogs(SHARED, 120).catch(() => [])
+    console.error('Hudson refresh Paper tail\n' + paperTail.slice(-60).join('\n'))
+    throw error
+  }
   await waitPlayers(SHARED, 2, 30_000)
   await rendererReady(hudson.page, 'Hudson after refresh')
   pass('session.refresh-resume', 'browser refresh/reconnect via rotated one-use resume lease')
