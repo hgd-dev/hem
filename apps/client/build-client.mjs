@@ -121,6 +121,19 @@ const pnpm = args => run('npx', ['--yes', `pnpm@${pnpmVersion}`, ...args], upstr
 process.env.CYPRESS_INSTALL_BINARY ??= '0'
 pnpm(['install', '--frozen-lockfile'])
 
+// node-minecraft-protocol's historical registerarr serializer writes every
+// channel as a C string, leaving a trailing NUL after the final identifier.
+// Modern Paper/proxy channel parsers can interpret that final byte as an empty
+// identifier and terminate the connection before HEM can receive a resume lease.
+// Patch only the runtime-resolved installed package, preserve the frozen lockfile,
+// and fail closed if the dependency source shape is no longer the reviewed one.
+const pluginRegisterPatchScript = path.join(here, 'patch-minecraft-protocol-register.mjs')
+run('node', [pluginRegisterPatchScript, upstream])
+const pluginRegisterPatchReportPath = path.join(upstream, '.hem-minecraft-protocol-register.json')
+const minecraftProtocolRegisterPatch = JSON.parse(await fsp.readFile(pluginRegisterPatchReportPath, 'utf8'))
+if (minecraftProtocolRegisterPatch.patchId !== 'hem-minecraft-protocol-register-no-trailing-nul-v1') throw new Error('HEM minecraft-protocol REGISTER patch identity mismatch')
+if (minecraftProtocolRegisterPatch.runtimeResolved !== true || minecraftProtocolRegisterPatch.exactRegistration !== true || minecraftProtocolRegisterPatch.trailingNulRemoved !== true) throw new Error('HEM minecraft-protocol REGISTER patch attestation mismatch')
+
 // The stable v0.1.99 snapshot predates the finalized 1.21.5 chunk palette
 // wire-format fix in its frozen prismarine-chunk graph. Patch only that installed
 // package after the authoritative lockfile install: 1.21.5+ omits the legacy
@@ -286,7 +299,7 @@ delete config.defaultProxy
 await fsp.writeFile(configPath, JSON.stringify(config, null, 2) + '\n')
 
 await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
-  hemVersion: '1.0.0-rc.28',
+  hemVersion: '1.0.0-rc.29',
   minecraft: '1.21.5',
   upstreamRepo: repo,
   upstreamRef: ref,
@@ -302,6 +315,7 @@ await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
   frozenLockfile: true,
   soundMap: { source: generatedSoundMapSource, sha256: generatedSoundMapSha256, bytes: generatedSoundMapBytes.length, path: '/sounds.js' },
   prismarineChunkPatch,
+  minecraftProtocolRegisterPatch,
   protocolVerified1215,
   compatibilityMode,
   ...dependencyVersions,

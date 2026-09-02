@@ -1,13 +1,13 @@
-# HEM RC27 verification record
+# HEM RC29 verification record
 
-Date: 2026-09-01
+Date: 2026-09-02
 
 ## Completed in the build sandbox
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **99/99 passing** source/logic/security/release-gate tests in the current RC27 local pass.
-- `npm run verify`: **56/56 release contracts passing**.
+- `npm test`: **103/103 passing** source/logic/security/release-gate tests in the current RC29 local pass.
+- `npm run verify`: **57/57 release contracts passing**.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
 - HEM browser build script checks out the exact v0.1.99 stable-release commit `0359f20b8d721ea44c7ddb633c985a71574c73d3`, preserves and hashes its checked-in `package.json` + `pnpm-lock.yaml`, installs with the upstream-declared pnpm version and `--frozen-lockfile`, forces the 1.21.5 version gate, enables auto-connect, and refuses to bundle unless the resulting installed graph resolves Minecraft 1.21.5 / protocol 770 / DataVersion 4325 with complete registry round-trips and the native Spring to Life item-definition layer.
@@ -101,6 +101,14 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 
 
 
+
+## RC29 exact minecraft:register framing repair
+
+- RC28's browser registration path used node-minecraft-protocol's documented `registerChannel(name, parser, true)` helper. Root-cause tracing found that its historical `registerarr` writer still emits every identifier as a C string, including a final trailing NUL byte. Modern Paper/proxy implementations can parse that final byte as an empty identifier and reject the registration before `hem:session` ever reaches `Player#getListeningPluginChannels()`.
+- RC29 adds `apps/client/patch-minecraft-protocol-register.mjs`. After the exact v0.1.99 frozen install, it resolves the actual runtime `minecraft-protocol` package, fails closed unless the reviewed historical serializer shape is present, and rewrites REGISTER/UNREGISTER arrays to use NUL **between** identifiers but never after the final identifier.
+- The patch emits `.hem-minecraft-protocol-register.json` with package version, runtime-resolved root, before/after hashes, and explicit `exactRegistration` / `trailingNulRemoved` attestations. `build-client.mjs` requires that report before bundling and records it in `hem-build.json`.
+- Regression tests prove a single `hem:session` registration contains no trailing NUL, multi-channel registration retains exactly one separator, the build applies the patch, and `npm run verify` treats the repair as a mandatory release contract.
+- This RC is source-verified locally; the pinned two-browser Paper workflow must still prove the live refresh/resume and proxy-outage gates before the release blockers can close.
 
 ## RC28 registered resume-channel + long-lived proxy session repair
 
