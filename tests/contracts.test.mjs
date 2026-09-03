@@ -80,13 +80,18 @@ test('offsite backup takes a graceful cold world snapshot',()=>{
 
 test('multiplayer presence accounting is idempotent under reordered join/quit delivery',()=>{
   const o=read('apps/orchestrator/server.mjs')
+  const presence=read('apps/orchestrator/presence.mjs')
   assert.match(o,/presenceClock/)
-  assert.match(o,/at>=previous\.at/)
-  assert.match(o,/filter\(x=>x\.connected\)\.length/)
+  assert.match(o,/applyPresenceUpdate/)
+  assert.match(presence,/generation < previous\.generation/)
+  assert.match(presence,/generation === previous\.generation && at < previous\.at/)
+  assert.match(presence,/filter\(entry => entry\.connected\)\.length/)
   const p=read('apps/server-plugin/src/main/java/com/hemcraft/gate/HEMGatePlugin.java')
+  assert.match(p,/connectionGenerations/)
+  assert.match(p,/lastGenerationByPlayer/)
   assert.match(p,/System\.currentTimeMillis\(\)/)
   assert.match(p,/postPresence\(player, true\)/)
-  assert.match(p,/postPresence\(e\.getPlayer\(\), false\)/)
+  assert.match(p,/postPresence\(player, false\)/)
 })
 
 test('1.21.5 removes the post-1.21.5 physics scale shim while retaining live movement/combat gates',()=>{
@@ -841,7 +846,7 @@ test('RC19 orchestrator runtime image ships every local module imported by serve
   const server=read('apps/orchestrator/server.mjs')
   const docker=read('apps/orchestrator/Dockerfile')
   const imports=[...server.matchAll(/from ['\"](\.\/[^'\"]+)['\"]/g)].map(m=>m[1].replace(/^\.\//,''))
-  assert.deepEqual(new Set(imports),new Set(['world-config.mjs','world-version.mjs']))
+  assert.deepEqual(new Set(imports),new Set(['world-config.mjs','world-version.mjs','presence.mjs']))
   for(const file of imports){
     assert.ok(docker.includes(`COPY apps/orchestrator/${file} ./${file}`),`orchestrator image does not copy imported runtime module ${file}`)
   }

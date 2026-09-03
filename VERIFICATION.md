@@ -1,4 +1,4 @@
-# HEM RC32 verification record
+# HEM RC33 verification record
 
 Date: 2026-09-02
 
@@ -6,7 +6,7 @@ Date: 2026-09-02
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **111/111 passing** source/logic/security/release-gate tests in the current RC32 local pass.
+- `npm test`: **118/118 passing** source/logic/security/release-gate tests in the current RC33 local pass.
 - `npm run verify`: **57/57 release contracts passing**.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
@@ -174,6 +174,14 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - Root-cause tracing found the RC30 browser started `/hem lease` in the same authorization tick as `/hem auth`/`/hem resume` and retried every 250 ms for up to 40 attempts. The server authorization is asynchronous, so this generated repeated signed command traffic before the current physical connection had been confirmed authorized and before Paper was guaranteed to expose `hem:session`.
 - RC31 waits for Paper's explicit `HEM: connected` / `HEM: resumed` confirmation before requesting a lease, then uses a bounded six-attempt 1.5-second retry cadence. The launch/resume credential path stays one-use and the lease request remains secret-free.
 - HEMGate now emits secret-free live diagnostics when `hem:session` is registered, when a lease request is waiting on channel registration, and when a lease is issued. The initial lease acceptance failure now prints browser authorization/resume state and the Paper log tail, matching the existing refresh-resume diagnostic path.
+
+## RC33 refresh-presence generation repair
+
+- The RC32 live run reached the post-refresh `waitPlayers(..., 2)` gate after the refresh resume attempt and rotated lease had already succeeded.
+- RC33 replaces timestamp-only username presence ordering with a monotonic per-player physical connection generation. A stale quit from generation N cannot erase generation N+1, regardless of webhook arrival order.
+- `apps/orchestrator/presence.mjs` contains the pure generation-aware reducer and has direct regression tests for stale-disconnect, current-disconnect, newer-generation, and reordered-webhook cases.
+- The two-browser acceptance runner now logs exact HTTP 400 URLs and a bounded body preview so browser-console 400s can be attributed to the correct layer.
+- Live refresh recovery remains unclaimed until the exact RC33 artifact passes the two-browser Paper 1.21.5 workflow.
 
 ## RC32 deterministic refresh / upstream service-worker isolation
 

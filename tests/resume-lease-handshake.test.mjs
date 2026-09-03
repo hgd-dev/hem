@@ -48,7 +48,7 @@ test('authorization ownership is connection-scoped so an old quit cannot deautho
   assert.match(plugin, /IdentityHashMap/)
   assert.match(plugin, /Set<Player> authenticated/)
   assert.match(plugin, /authenticated\.contains\(p\)/)
-  assert.match(plugin, /authenticated\.remove\(e\.getPlayer\(\)\)/)
+  assert.match(plugin, /authenticated\.remove\(player\)/)
 })
 
 test('live acceptance isolates resume-attempt failure from rotated-lease delivery failure', () => {

@@ -20,6 +20,7 @@ COPY apps/orchestrator/package.json ./package.json
 COPY apps/orchestrator/server.mjs ./server.mjs
 COPY apps/orchestrator/world-config.mjs ./world-config.mjs
 COPY apps/orchestrator/world-version.mjs ./world-version.mjs
+COPY apps/orchestrator/presence.mjs ./presence.mjs
 COPY --from=plugin-build /src/build/libs/hem-gate.jar /opt/hem/HEMGate.jar
 RUN mkdir -p /data/worlds
 ENV WORLD_ROOT=/data/worlds PAPER_VERSION=1.21.5 PAPER_BUILD=114 PAPER_SHA256=2ae6ae22adf417699746e0f89fc2ef6cb6ee050a5f6608cee58f0535d60b509e PAPER_JAR=/opt/hem/paper.jar HEM_PLUGIN_JAR=/opt/hem/HEMGate.jar PORT=3000

@@ -161,6 +161,11 @@ async function openPlayer(browser, port, user, token, fatal, label) {
   })
   page.on('response', async response => {
     const url = response.url()
+    if (response.status() === 400) {
+      let body = ''
+      try { body = (await response.text()).replace(/\s+/g, ' ').slice(0, 240) } catch {}
+      console.log(`${label} HTTP 400: ${url}${body ? ` :: ${body}` : ''}`)
+    }
     const match = /\/skins\/(hudson|elise)\.png(?:[?#]|$)/i.exec(url)
     if (match && response.ok()) skinFetches.add(match[1].toLowerCase())
     if (url.startsWith('http://127.0.0.1:4173/')) {

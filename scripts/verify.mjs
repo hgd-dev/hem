@@ -6,13 +6,13 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..')
 const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'))
 const required=[
   'apps/hub/src/worker.mjs','apps/hub/src/lib.mjs','apps/hub/public/index.html','apps/hub/public/app.js','apps/hub/public/skin-preview-3d.js','apps/hub/public/styles.css',
-  'apps/orchestrator/server.mjs','apps/orchestrator/world-config.mjs','apps/orchestrator/world-version.mjs','apps/orchestrator/Dockerfile','apps/proxy/server.cjs','apps/proxy/Dockerfile',
+  'apps/orchestrator/server.mjs','apps/orchestrator/world-config.mjs','apps/orchestrator/world-version.mjs','apps/orchestrator/presence.mjs','apps/orchestrator/Dockerfile','apps/proxy/server.cjs','apps/proxy/Dockerfile',
   'apps/server-plugin/build.gradle.kts','apps/server-plugin/src/main/java/com/hemcraft/gate/HEMGatePlugin.java',
   'apps/client/build-client.mjs','apps/client/patch-prismarine-chunk-1215.mjs','apps/client/patch-minecraft-protocol-register.mjs','apps/client/hem-bridge.js','tests/system/required-gates-1215.json','tests/system/auth-stub.mjs','tests/system/static-client.mjs','tests/system/tls/skin-test-key.pem','tests/system/tls/skin-test-cert.pem','tests/system/launcher-3d.mjs','tests/system/static-hub.mjs','tests/system/backup-restore-drill.sh','scripts/verify-certification.mjs','scripts/reconcile-release-blockers.mjs','scripts/verify-production-r2-evidence.mjs','scripts/verify-manual-acceptance.mjs','scripts/doctor.mjs','scripts/source-manifest.mjs','infra/production-r2-drill.sh','infra/docker-compose.yml','infra/Caddyfile','infra/preflight.sh','scripts/preflight.mjs','scripts/render-cloudflare-config.mjs','.github/workflows/deploy-cloudflare.yml','README.md','docs/ACCEPTANCE.md','docs/MANUAL_ACCEPTANCE.md','docs/RELEASE_BLOCKERS.md'
 ]
 for(const f of required)if(!fs.existsSync(path.join(root,f)))throw new Error(`Missing required release file: ${f}`)
 for(const f of [
-  'apps/hub/src/worker.mjs','apps/hub/src/lib.mjs','apps/hub/public/app.js','apps/hub/public/skin-preview-3d.js','apps/orchestrator/server.mjs','apps/orchestrator/world-config.mjs','apps/orchestrator/world-version.mjs','apps/client/build-client.mjs','apps/client/patch-prismarine-chunk-1215.mjs','apps/client/patch-minecraft-protocol-register.mjs','apps/client/hem-bridge.js','scripts/verify-certification.mjs','scripts/reconcile-release-blockers.mjs','scripts/verify-production-r2-evidence.mjs','scripts/verify-manual-acceptance.mjs','scripts/doctor.mjs'
+  'apps/hub/src/worker.mjs','apps/hub/src/lib.mjs','apps/hub/public/app.js','apps/hub/public/skin-preview-3d.js','apps/orchestrator/server.mjs','apps/orchestrator/world-config.mjs','apps/orchestrator/world-version.mjs','apps/orchestrator/presence.mjs','apps/client/build-client.mjs','apps/client/patch-prismarine-chunk-1215.mjs','apps/client/patch-minecraft-protocol-register.mjs','apps/client/hem-bridge.js','scripts/verify-certification.mjs','scripts/reconcile-release-blockers.mjs','scripts/verify-production-r2-evidence.mjs','scripts/verify-manual-acceptance.mjs','scripts/doctor.mjs'
 ]) execFileSync(process.execPath,['--check',path.join(root,f)],{stdio:'inherit'})
 const files=[]; const walk=d=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){if(['node_modules','.git','upstream','dist','artifacts'].includes(e.name))continue;const p=path.join(d,e.name);e.isDirectory()?walk(p):files.push(p)}};walk(root)
 for(const p of files){const rel=path.relative(root,p);const st=fs.statSync(p);if(st.size>5*1024*1024)throw new Error(`Unexpected large source artifact: ${rel}`)}
@@ -20,6 +20,7 @@ const hub=fs.readFileSync(path.join(root,'apps/hub/src/worker.mjs'),'utf8')
 const orch=fs.readFileSync(path.join(root,'apps/orchestrator/server.mjs'),'utf8')
 const worldConfig=fs.readFileSync(path.join(root,'apps/orchestrator/world-config.mjs'),'utf8')
 const worldVersion=fs.readFileSync(path.join(root,'apps/orchestrator/world-version.mjs'),'utf8')
+const presence=fs.readFileSync(path.join(root,'apps/orchestrator/presence.mjs'),'utf8')
 const client=fs.readFileSync(path.join(root,'apps/client/build-client.mjs'),'utf8')
 const chunkPatch=fs.readFileSync(path.join(root,'apps/client/patch-prismarine-chunk-1215.mjs'),'utf8')
 const registerPatch=fs.readFileSync(path.join(root,'apps/client/patch-minecraft-protocol-register.mjs'),'utf8')
@@ -54,7 +55,7 @@ const checks=[
   ['auto connect explicit',/allowAutoConnect\s*=\s*true/.test(client)],['Paper auth gate',/HEM launch authorization expired/.test(plugin)],
   ['secrets not query params',!/searchParams\.set\(['"]hemToken/.test(fs.readFileSync(path.join(root,'apps/hub/src/lib.mjs'),'utf8'))],
   ['graceful Paper shutdown',/save-all flush/.test(orch)&&/45_000/.test(orch)],
-  ['timestamped player presence',/presenceClock/.test(orch)&&/at>=previous\.at/.test(orch)],
+  ['generation-aware player presence',/presenceClock/.test(orch)&&/applyPresenceUpdate/.test(orch)&&/generation < previous\.generation/.test(presence)&&/generation === previous\.generation && at < previous\.at/.test(presence)&&/connectionGenerations/.test(plugin)&&/lastGenerationByPlayer/.test(plugin)],
   ['production deployment preflight',/preflight:production/.test(deploy)],
   ['custom skin Paper profile propagation',/ProfileProperty\(\"textures\"/.test(plugin)&&/setPlayerProfile\(profile\)/.test(plugin)&&/i\.skin_model,i\.skin_png,i\.profile_updated_at/.test(hub)],
   ['skin endpoint WebGL CORS',/access-control-allow-origin/.test(hub)&&/cross-origin-resource-policy/.test(hub)],

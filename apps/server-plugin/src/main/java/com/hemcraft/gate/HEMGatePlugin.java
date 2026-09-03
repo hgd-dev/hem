@@ -51,6 +51,8 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
 
     private final Set<Player> authenticated = Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<Player> pendingLeaseRequests = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Map<Player, Long> connectionGenerations = new IdentityHashMap<>();
+    private final Map<String, Long> lastGenerationByPlayer = new ConcurrentHashMap<>();
     private final Map<UUID, SessionLease> activeSessions = new ConcurrentHashMap<>();
     private final Map<String, SessionLease> resumeSessions = new ConcurrentHashMap<>();
     private final Map<String, String> activeResumeTokens = new ConcurrentHashMap<>();
@@ -94,6 +96,8 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
         getServer().getMessenger().unregisterOutgoingPluginChannel(this, SESSION_CHANNEL);
         authenticated.clear();
         pendingLeaseRequests.clear();
+        connectionGenerations.clear();
+        lastGenerationByPlayer.clear();
         activeSessions.clear();
         resumeSessions.clear();
         activeResumeTokens.clear();
@@ -106,6 +110,9 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
         Player p = e.getPlayer();
         authenticated.remove(p);
         pendingLeaseRequests.remove(p);
+        String playerKey = p.getName().toLowerCase(Locale.ROOT);
+        long connectionGeneration = lastGenerationByPlayer.merge(playerKey, 1L, Long::sum);
+        connectionGenerations.put(p, connectionGeneration);
         p.setInvulnerable(true);
         p.setCollidable(false);
         p.sendMessage(ChatColor.GOLD + "HEM: authorizing this 1.21.5 world…");
@@ -305,7 +312,9 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
 
     private void postPresence(Player player, boolean connected) {
         if (orchestratorUrl.isBlank() || orchestratorKey.isBlank()) return;
-        String json = "{\"worldId\":\"" + worldId + "\",\"player\":\"" + jsonEscape(player.getName()) + "\",\"connected\":" + connected + ",\"at\":" + System.currentTimeMillis() + "}";
+        Long connectionGeneration = connectionGenerations.get(player);
+        if (connectionGeneration == null) return;
+        String json = "{\"worldId\":\"" + worldId + "\",\"player\":\"" + jsonEscape(player.getName()) + "\",\"generation\":" + connectionGeneration + ",\"connected\":" + connected + ",\"at\":" + System.currentTimeMillis() + "}";
         HttpRequest req = HttpRequest.newBuilder(URI.create(orchestratorUrl + "/internal/presence"))
             .timeout(Duration.ofSeconds(3)).header("content-type", "application/json").header("x-hem-service-key", orchestratorKey)
             .POST(HttpRequest.BodyPublishers.ofString(json)).build();
@@ -315,7 +324,12 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
     @EventHandler public void onRegisterChannel(PlayerRegisterChannelEvent e) {
         if (SESSION_CHANNEL.equals(e.getChannel())) getLogger().info("Resume channel registered by " + e.getPlayer().getName());
     }
-    @EventHandler public void onQuit(PlayerQuitEvent e) { pendingLeaseRequests.remove(e.getPlayer()); if (authenticated.remove(e.getPlayer())) postPresence(e.getPlayer(), false); }
+    @EventHandler public void onQuit(PlayerQuitEvent e) {
+        Player player = e.getPlayer();
+        pendingLeaseRequests.remove(player);
+        if (authenticated.remove(player)) postPresence(player, false);
+        connectionGenerations.remove(player);
+    }
     @EventHandler(ignoreCancelled=true, priority=EventPriority.LOWEST) public void onMove(PlayerMoveEvent e) { if (!locked(e.getPlayer()) || e.getTo()==null) return; Location f=e.getFrom(),t=e.getTo(); if (f.getX()!=t.getX()||f.getY()!=t.getY()||f.getZ()!=t.getZ()) e.setTo(new Location(f.getWorld(),f.getX(),f.getY(),f.getZ(),t.getYaw(),t.getPitch())); }
     @EventHandler(ignoreCancelled=true, priority=EventPriority.LOWEST) public void onBreak(BlockBreakEvent e){if(locked(e.getPlayer()))e.setCancelled(true);}
     @EventHandler(ignoreCancelled=true, priority=EventPriority.LOWEST) public void onPlace(BlockPlaceEvent e){if(locked(e.getPlayer()))e.setCancelled(true);}

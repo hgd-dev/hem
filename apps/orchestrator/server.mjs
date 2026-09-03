@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { buildServerProperties, serializeServerProperties } from './world-config.mjs'
 import { assertWorldCompatible } from './world-version.mjs'
+import { applyPresenceUpdate } from './presence.mjs'
 
 const PORT = Number(process.env.PORT || 3000)
 const ROOT = path.resolve(process.env.WORLD_ROOT || '/data/worlds')
@@ -84,7 +85,7 @@ async function ensurePaperJar(){
   paperDownloadPromise=(async()=>{
     if(PAPER_VERSION!=='1.21.5'||PAPER_BUILD!=='114')throw new Error(`HEM 1.0 is pinned to Paper 1.21.5 build 114; got ${PAPER_VERSION} build ${PAPER_BUILD}`)
     await fsp.mkdir(path.dirname(PAPER_JAR),{recursive:true})
-    const ua='HEM/1.0.0-rc.32 (Hudson-Elise-Minecraft; private deployment)'
+    const ua='HEM/1.0.0-rc.33 (Hudson-Elise-Minecraft; private deployment)'
     const url=`https://fill-data.papermc.io/v1/objects/${PAPER_SHA256}/paper-${PAPER_VERSION}-${PAPER_BUILD}.jar`
     const jar=await fetch(url,{headers:{'user-agent':ua}})
     if(!jar.ok)throw new Error(`Paper jar HTTP ${jar.status}`)
@@ -168,11 +169,11 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='POST'&&url.pathname==='/internal/presence'){
       const body=await readBody(req);const state=worlds.get(body.worldId);if(!state)return response(res,404,{ok:false,error:'world not active'})
-      const player=String(body.player||'').toLowerCase();const at=Number(body.at||0);const connected=body.connected===true
-      if(!/^[a-z0-9_]{3,16}$/.test(player)||!Number.isFinite(at)||at<=0)return response(res,400,{ok:false,error:'invalid presence'})
+      const player=String(body.player||'').toLowerCase();const at=Number(body.at||0);const connected=body.connected===true;const generation=Number(body.generation||0)
+      if(!/^[a-z0-9_]{3,16}$/.test(player)||!Number.isFinite(at)||at<=0||!Number.isSafeInteger(generation)||generation<=0)return response(res,400,{ok:false,error:'invalid presence'})
       const worldPresence=presenceClock.get(body.worldId)||new Map();presenceClock.set(body.worldId,worldPresence)
-      const previous=worldPresence.get(player);if(!previous||at>=previous.at)worldPresence.set(player,{at,connected})
-      state.players=[...worldPresence.values()].filter(x=>x.connected).length;if(state.players===0)state.lastZero=Date.now()
+      const update=applyPresenceUpdate(worldPresence,{player,generation,connected,at})
+      state.players=update.players;if(state.players===0)state.lastZero=Date.now()
       return response(res,200,{ok:true,players:state.players})
     }
     if(req.method==='POST'&&url.pathname==='/internal/stop'){
