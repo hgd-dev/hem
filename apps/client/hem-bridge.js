@@ -9,7 +9,7 @@
   // Expose a tiny read-only diagnostics surface for HEM's automated acceptance
   // runner. It deliberately contains no launch/resume secrets or profile credentials.
   const parity = {
-    hemVersion: '1.0.0-rc.33',
+    hemVersion: '1.0.0-rc.34',
     target: '1.21.5',
     connected: false,
     build: { checked: false, ok: false, compatibilityMode: '', upstreamRelease1215: null, protocolVerified1215: null, upstreamCommit: '' },
@@ -231,13 +231,19 @@
       tone(520, .045, .012)
       const text = typeof message?.toString === 'function' ? message.toString() : String(message || '')
       parity.recentMessages.push(text); if (parity.recentMessages.length > 50) parity.recentMessages.shift()
-      // Paper sends this only after the launch/resume credential has been accepted
-      // on the current physical connection. Start the secret-free lease request
-      // from that confirmation instead of racing the asynchronous authorization.
-      if (/HEM:\s+(?:connected|resumed)\s+to\b/i.test(text)) {
+      // Paper sends these only after the credential has been accepted on the
+      // current physical connection. A fresh launch needs one private plugin-channel
+      // delivery to seed sessionStorage. A resume deliberately keeps the existing
+      // short-lived reconnect lease, so reconnect correctness no longer depends on
+      // Paper -> browser custom-payload delivery working a second time.
+      if (/HEM:\s+connected\s+to\b/i.test(text)) {
         parity.authorization.authenticated = true
         parity.authorization.failed = false
         requestResumeLease(bot)
+      } else if (/HEM:\s+resumed\s+to\b/i.test(text)) {
+        parity.authorization.authenticated = true
+        parity.authorization.failed = false
+        parity.resume.stored = Boolean(readResume())
       }
     })
     bot.on?.('playerJoined', () => { parity.multiplayerEvents.joined++ })

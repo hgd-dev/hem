@@ -181,17 +181,27 @@ public final class HEMGatePlugin extends JavaPlugin implements Listener {
 
     private void resumeSession(Player player, String token) {
         cleanupResumeSessions();
-        SessionLease lease = resumeSessions.remove(token);
+        // The reconnect lease is intentionally reusable until its original expiry.
+        // The initial plugin-channel delivery is proven reliable; requiring a second
+        // custom payload after every reconnect made refresh depend on a flaky
+        // post-reconnect client event path. Fresh launch authorization revokes this
+        // lease, and the lease remains bound to the same HEM username and world.
+        SessionLease lease = resumeSessions.get(token);
         if (lease == null || lease.expiresAt() < System.currentTimeMillis() || !lease.username().equalsIgnoreCase(player.getName())) {
             player.kickPlayer("HEM resume session expired. Return to the HEM world menu and launch again.");
             return;
         }
-        String playerKey = player.getName().toLowerCase(Locale.ROOT);
-        activeResumeTokens.remove(playerKey, token);
         completeAuthorization(player, lease, "resumed");
     }
 
+    private void revokeActiveResumeSession(Player player) {
+        String playerKey = player.getName().toLowerCase(Locale.ROOT);
+        String oldToken = activeResumeTokens.remove(playerKey);
+        if (oldToken != null) resumeSessions.remove(oldToken);
+    }
+
     private void completeAuthorization(Player player, SessionLease lease, String verb) {
+        if (verb.equals("connected")) revokeActiveResumeSession(player);
         SessionLease active = new SessionLease(
             player.getName(), lease.displayName(), lease.skinModel(), lease.skinUrl(), lease.commandsAuthorized(), System.currentTimeMillis() + RESUME_TTL_MS
         );

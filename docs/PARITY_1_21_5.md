@@ -174,11 +174,11 @@ HEM is a private, browser-native clean-room reproduction. It does **not** redist
 - PASS private world membership/launch-token contract
 - PARTIAL 60-minute two-browser browser/session/renderer soak is now mandatory on main/manual System Acceptance runs (5-minute PR smoke); live green evidence is still required
 - PARTIAL forced active-Paper `SIGKILL` recovery is now in System Acceptance and verifies saved block + both player inventories after restart; live green evidence is still required
-- PARTIAL browser refresh/reconnect uses a rotating five-minute one-use `hem:session` lease; System Acceptance now also stops/restarts the real proxy and requires both same tabs to recover through fresh resume leases, but live green evidence is still required
+- PARTIAL browser refresh/reconnect uses a five-minute browser-local `hem:session` reconnect lease seeded once over the private plugin channel; the original launch token stays one-use, a fresh launch revokes the prior reconnect lease, and System Acceptance stops/restarts the real proxy and requires both same tabs to recover with their retained leases; live green evidence is still required
 - PARTIAL R2 backup checksum + remote `rclone check` + guarded restore/automatic rollback helper are implemented; RC11 adds a deterministic Docker+rclone-local system drill proving good restore, post-backup mutation replacement and rollback after an invalid destructive restore, but a real disposable clean-host Cloudflare R2 transport drill is still required
 
 ## Certification/reproducibility
-- PASS local source contracts require protocol 770, complete registry round-trips, the frozen upstream modern item-definition layer, one-use launch/resume credentials, crash-recovery hooks, executable backup/restore rollback safeguards and the 60-minute system-soak definition
+- PASS local source contracts require protocol 770, complete registry round-trips, the frozen upstream modern item-definition layer, one-use launch credentials plus bounded reconnect leases, crash-recovery hooks, executable backup/restore rollback safeguards and the 60-minute system-soak definition
 - PARTIAL System Acceptance records named gameplay gates in `hem-1215-certification.json` and separate launcher/restore certificates; `scripts/verify-certification.mjs` rejects missing gates, missing WebGL Classic/Slim/legacy proof, missing restore+rollback proof, inadequate soak or an unpinned final upstream ref. This sandbox cannot produce a live PASS certificate
 - PASS production Cloudflare deployment refuses a moving browser-client branch/tag and requires `MWC_REF` to equal an exact 40-character upstream commit SHA
 

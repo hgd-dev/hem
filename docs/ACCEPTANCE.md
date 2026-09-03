@@ -26,8 +26,8 @@ The workflow verifies:
 5. HEMGate authenticates both one-use launch sessions and Paper reports two players.
 6. Both clients load protocol 770 / 1.21.5 registries and live rendered chunk-section meshes; `hem-build.json` must attest the deterministic `hem-prismarine-chunk-1215-nosize-v5` block/biome no-size-prefix decoder patch and the generated `/sounds.js` byte-count/SHA-256 before the renderer/capability gate can pass.
 7. Each browser fetches the other player’s distinct custom HEM skin over the system HTTPS skin origin after post-auth profile re-announcement.
-8. A normal browser refresh reauthorizes through a rotated five-minute one-use `hem:session` lease without reusing the original launch token or putting secrets in the URL.
-9. The Docker proxy is actually stopped; both clients disconnect and Paper presence reaches zero. After restart, the same tabs recover only through fresh resume leases.
+8. A normal browser refresh reauthorizes through the retained five-minute browser-local `hem:session` reconnect lease without reusing the original one-use launch token or putting secrets in the URL; a fresh launch revokes the prior reconnect lease.
+9. The Docker proxy is actually stopped; both clients disconnect and Paper presence reaches zero. After restart, the same tabs recover through their still-valid browser-local reconnect leases.
 10. Elise sees Hudson as a remote entity, receives horizontal movement, and sees a browser-origin jump.
 11. A real Chromium `W` key event (not a direct Mineflayer control call) moves Hudson server-authoritatively and Elise sees that movement.
 12. A controlled vertical fall is server-authoritative and produces fall damage.
@@ -72,7 +72,7 @@ After automated acceptance is green, deploy to the intended VPS/Cloudflare URLs 
 - [ ] Elise creates an independent Singleplayer world and Hudson cannot see it.
 - [ ] One player creates a shared world and sends one invite.
 - [ ] Other player redeems it; the shared world remains in Multiplayer after refresh/re-login.
-- [ ] Refresh an active game tab; it reconnects without returning to the launcher, while a stale/used resume lease cannot be replayed.
+- [ ] Refresh an active game tab; it reconnects without returning to the launcher. Confirm the reconnect lease expires on schedule and a fresh launcher authorization revokes the old lease.
 - [ ] Both play simultaneously for at least 60 minutes.
 - [ ] Mining, placing, crafting table, furnace, chest and inventory manipulation work.
 - [ ] A world created with Allow Commands: On accepts normal player commands and command-block use; a world created with it Off does not grant those privileges.

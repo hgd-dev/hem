@@ -259,7 +259,7 @@ try {
   pass('client.settings-transport', 'HEM video/input/audio settings transported into browser client launch')
 
   // The browser must explicitly register HEM's raw plugin channel before the
-  // server can safely deliver the one-use resume lease. Prove both registration
+  // server can safely deliver the initial private reconnect lease. Prove both registration
   // and delivery before spending time on later renderer/profile gates.
   await waitFor(() => hudson.page.evaluate(() => Boolean(globalThis.__HEM_PARITY__?.resume?.channelRegistered)), 'Hudson registers HEM resume plugin channel', 10_000)
   await waitFor(() => elise.page.evaluate(() => Boolean(globalThis.__HEM_PARITY__?.resume?.channelRegistered)), 'Elise registers HEM resume plugin channel', 10_000)
@@ -292,18 +292,18 @@ try {
   await waitFor(() => hudson.skinFetches.has('elise'), 'Hudson renderer fetches Elise custom skin', 30_000)
   pass('profile.remote-skins', 'distinct two-browser custom skin renderer path')
 
-  // The original one-use launch token is deliberately erased after auth. RC8
-  // rotates a short-lived one-use resume lease through a private plugin channel so
-  // a normal browser refresh can reauthorize without weakening launch-token replay
-  // protection or putting credentials back into the URL.
+  // The original one-use launch token is deliberately erased after auth. The
+  // private plugin channel seeds a short-lived reconnect lease once. Refresh then
+  // reuses that browser-local lease until its absolute expiry; a fresh launch revokes
+  // it. This avoids making reconnect depend on post-reconnect custom-payload delivery.
   await hudson.page.reload({ waitUntil: 'domcontentloaded', timeout: 120_000 })
   await pageReady(hudson.page, H)
   try {
     await waitFor(() => hudson.page.evaluate(() => Boolean(globalThis.__HEM_PARITY__?.resume?.attempted)), 'Hudson refresh attempts stored lease', 15_000)
     await waitFor(() => hudson.page.evaluate(() => {
-      const r = globalThis.__HEM_PARITY__?.resume
-      return Boolean(r?.stored && r.received >= 1)
-    }), 'Hudson refresh receives rotated lease', 30_000)
+      const p = globalThis.__HEM_PARITY__
+      return Boolean(p?.authorization?.authenticated && p?.resume?.stored)
+    }), 'Hudson refresh reuses short-lived reconnect lease', 30_000)
   } catch (error) {
     const diagnostic = await hudson.page.evaluate(() => {
       const p = globalThis.__HEM_PARITY__ || {}
@@ -321,11 +321,11 @@ try {
   }
   await waitPlayers(SHARED, 2, 30_000)
   await rendererReady(hudson.page, 'Hudson after refresh')
-  pass('session.refresh-resume', 'browser refresh/reconnect via rotated one-use resume lease')
+  pass('session.refresh-resume', 'browser refresh/reconnect via retained short-lived reconnect lease')
 
   // A page refresh is only one reconnect shape. Prove a transient proxy outage
   // actually drops both browser sessions, then recover the same tabs after the
-  // proxy returns using only their short-lived one-use resume leases.
+  // proxy returns using only their retained short-lived reconnect leases.
   await waitFor(() => elise.page.evaluate(() => Boolean(globalThis.__HEM_PARITY__?.resume?.stored)), 'Elise receives resume lease before proxy outage', 20_000)
   compose('stop', '-t', '15', 'proxy')
   await waitFor(() => hudson.page.evaluate(() => globalThis.__HEM_PARITY__?.connected === false), 'Hudson observes proxy outage', 30_000)

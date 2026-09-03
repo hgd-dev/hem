@@ -293,7 +293,7 @@ export default {
       const url = new URL(request.url)
       const p = url.pathname
       if (p.startsWith('/api/')) validateRuntimeEnv(env)
-      if (request.method === 'GET' && p === '/api/health') return json({ ok: true, minecraft: '1.21.5', hem: '1.0.0-rc.33' })
+      if (request.method === 'GET' && p === '/api/health') return json({ ok: true, minecraft: '1.21.5', hem: '1.0.0-rc.34' })
       if (request.method === 'POST' && p === '/api/register') return register(request, env)
       if (request.method === 'GET' && p === '/api/me') return me(request, env)
       if (request.method === 'PUT' && p === '/api/me/profile') return updateProfile(request, env)

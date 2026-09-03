@@ -14,12 +14,12 @@ test('resume lease issuance is client-requested instead of tied to authorization
   assert.match(pluginYml, /\/hem lease/)
 })
 
-test('browser requests a lease only after Paper confirms authorization and retries at a bounded low rate', () => {
+test('browser requests an initial lease only after fresh authorization and retries at a bounded low rate', () => {
   assert.match(bridge, /requestResumeLease/)
   assert.match(bridge, /bot\.chat\('\/hem lease'\)/)
   assert.match(bridge, /leaseRequests/)
   assert.match(bridge, /leaseRequestTimer/)
-  assert.match(bridge, /HEM:\\s\+\(\?:connected\|resumed\)/)
+  assert.match(bridge, /HEM:\\s\+connected\\s\+to\\b/)
   assert.match(bridge, /requestResumeLease\(bot\)/)
   assert.doesNotMatch(bridge, /bot\.chat\(`\/hem auth \$\{token\}`\)\s*\n\s*requestResumeLease\(bot\)/)
   assert.doesNotMatch(bridge, /bot\.chat\(`\/hem resume \$\{resume\}`\)\s*\n\s*requestResumeLease\(bot\)/)
@@ -30,7 +30,7 @@ test('browser requests a lease only after Paper confirms authorization and retri
 test('server makes repeated lease requests idempotent and keeps one active token per player', () => {
   assert.match(plugin, /activeResumeTokens/)
   assert.match(plugin, /resumeSessions\.get\(existingToken\)/)
-  assert.match(plugin, /activeResumeTokens\.remove\(playerKey, token\)/)
+  assert.match(plugin, /activeResumeTokens\.put\(playerKey, token\)/)
 })
 
 test('server emits secret-free channel/lease diagnostics for live acceptance failures', () => {
@@ -51,10 +51,32 @@ test('authorization ownership is connection-scoped so an old quit cannot deautho
   assert.match(plugin, /authenticated\.remove\(player\)/)
 })
 
-test('live acceptance isolates resume-attempt failure from rotated-lease delivery failure', () => {
+test('live acceptance isolates initial private lease delivery from reconnect lease reuse', () => {
   const acceptance = fs.readFileSync('tests/system/browser-1215.mjs', 'utf8')
   assert.match(acceptance, /Hudson refresh attempts stored lease/)
-  assert.match(acceptance, /Hudson refresh receives rotated lease/)
+  assert.match(acceptance, /Hudson refresh reuses short-lived reconnect lease/)
   assert.match(acceptance, /Hudson refresh resume diagnostics/)
   assert.match(acceptance, /Hudson initial resume lease diagnostics/)
+})
+
+test('short-lived reconnect lease survives a successful resume and fresh auth revokes the old lease', () => {
+  assert.match(plugin, /SessionLease lease = resumeSessions\.get\(token\)/)
+  assert.doesNotMatch(plugin, /SessionLease lease = resumeSessions\.remove\(token\)/)
+  assert.doesNotMatch(plugin, /activeResumeTokens\.remove\(playerKey, token\)/)
+  assert.match(plugin, /revokeActiveResumeSession\(player\)/)
+  assert.match(plugin, /if \(verb\.equals\("connected"\)\)/)
+})
+
+test('browser reuses the stored reconnect lease after resume without requiring another plugin payload', () => {
+  assert.match(bridge, /HEM:\\s\+connected\\s\+to\\b/i)
+  assert.match(bridge, /HEM:\\s\+resumed\\s\+to\\b/i)
+  assert.match(bridge, /parity\.resume\.stored\s*=\s*Boolean\(readResume\(\)\)/)
+  const resumedBranch = bridge.match(/if \(\/HEM:\\\\s\+resumed[\s\S]*?\n\s*\}/)?.[0] || ''
+  assert.doesNotMatch(resumedBranch, /requestResumeLease\(bot\)/)
+})
+
+test('live acceptance proves reconnect authorization using the retained lease instead of requiring rotated payload delivery', () => {
+  const acceptance = fs.readFileSync('tests/system/browser-1215.mjs', 'utf8')
+  assert.match(acceptance, /Hudson refresh reuses short-lived reconnect lease/)
+  assert.doesNotMatch(acceptance, /Hudson refresh receives rotated lease/)
 })

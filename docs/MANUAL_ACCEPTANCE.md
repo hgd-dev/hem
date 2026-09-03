@@ -43,7 +43,7 @@ Complete this worksheet on the production-shaped deployment after the exact-pinn
 - [ ] Both players can enter the shared world simultaneously and see one another moving in real time.
 - [ ] Shared-world membership survives launcher refresh/re-login.
 - [ ] Refresh an active game tab and confirm same-tab resume reconnects without exposing or reusing the original launch token.
-- [ ] A stale/consumed resume lease cannot be replayed successfully.
+- [ ] A reconnect lease works only within its bounded lifetime; after a fresh launcher authorization, the previous reconnect lease no longer authenticates.
 - [ ] Disconnect/reconnect preserves each player's inventory, position and world state.
 - [ ] Both authenticated browsers remain playable simultaneously for at least 60 continuous minutes.
 

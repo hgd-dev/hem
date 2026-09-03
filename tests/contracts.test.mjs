@@ -340,11 +340,13 @@ test('world list exposes Minecraft-style Edit flow with owner-only rename API',(
 })
 
 
-test('browser refresh uses a bounded one-use resume lease without weakening launch-token replay protection',()=>{
+test('browser refresh uses a bounded reusable reconnect lease without weakening fresh-launch replay protection',()=>{
   const p=read('apps/server-plugin/src/main/java/com/hemcraft/gate/HEMGatePlugin.java')
   const b=read('apps/client/hem-bridge.js')
   assert.match(p,/RESUME_TTL_MS\s*=\s*5 \* 60 \* 1000L/)
-  assert.match(p,/resumeSessions\.remove\(token\)/)
+  assert.match(p,/resumeSessions\.get\(token\)/)
+  assert.match(p,/revokeActiveResumeSession\(player\)/)
+  assert.match(p,/activeResumeTokens\.remove\(playerKey\)/)
   assert.match(p,/Base64\.getUrlEncoder\(\)\.withoutPadding\(\)/)
   assert.match(p,/registerOutgoingPluginChannel\(this, SESSION_CHANNEL\)/)
   assert.match(p,/getListeningPluginChannels\(\)\.contains\(SESSION_CHANNEL\)/)

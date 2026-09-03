@@ -1,4 +1,4 @@
-# HEM RC33 verification record
+# HEM RC34 verification record
 
 Date: 2026-09-02
 
@@ -6,7 +6,7 @@ Date: 2026-09-02
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **118/118 passing** source/logic/security/release-gate tests in the current RC33 local pass.
+- `npm test`: **121/121 passing** source/logic/security/release-gate tests in the current RC34 local pass.
 - `npm run verify`: **57/57 release contracts passing**.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
@@ -21,7 +21,7 @@ Date: 2026-09-02
 - Hub static responses include a restrictive CSP and related browser security headers. Uploaded custom skins are validated, served with WebGL-compatible CORS, injected into Paper player profiles with Classic/Slim texture metadata, and shown in a dependency-free WebGL Classic/Slim 3D launcher preview with outer layers and drag rotation; legacy 64×32 skins are normalized to a complete Classic 64×64 atlas.
 - Native Java-style world creation now includes Survival / Creative / Hardcore, Peaceful–Hard difficulty, Default / Superflat / Large Biomes / Amplified world types, Generate Structures, seed and per-world Allow Commands. Hardcore is enforced as Survival + Hard by Paper.
 - Per-world **Allow Commands** is now a first-class HEM world property: it travels through D1 → orchestrator → Paper `enable-command-block`/HEMGate and grants the authenticated player operator status only for that isolated world. The client-origin command acceptance no longer depends on a hidden `op` step.
-- A full two-Chromium + Paper 1.21.5 GitHub Actions acceptance workflow is included; RC11 additionally gates reciprocal live custom-skin fetches, browser refresh through a rotated one-use resume lease, a 60-minute main/manual two-browser renderer/session soak (5 minutes on pull requests), a real proxy stop/start resume test, and forced active-Paper `SIGKILL` recovery before the existing shared/Singleplayer persistence checks. RC11 also names every required gameplay gate, expands live coverage to normal keyboard movement, jump/fall damage, hunger/death/respawn, armor/offhand, 3×3 crafting, barrel + private ender chest, repeaters, redstone dust, time/weather/difficulty, world border, native portal entry and representative entity families, and emits `hem-1215-certification.json` alongside launcher/restore certificates and screenshot evidence. The workflow runs the real backup/restore helpers through a deterministic local-rclone remote, proves a good restore, then proves automatic rollback after a deliberately invalid destructive restore.
+- A full two-Chromium + Paper 1.21.5 GitHub Actions acceptance workflow is included; RC11 additionally gates reciprocal live custom-skin fetches, browser refresh through a bounded browser-local reconnect lease, a 60-minute main/manual two-browser renderer/session soak (5 minutes on pull requests), a real proxy stop/start resume test, and forced active-Paper `SIGKILL` recovery before the existing shared/Singleplayer persistence checks. RC11 also names every required gameplay gate, expands live coverage to normal keyboard movement, jump/fall damage, hunger/death/respawn, armor/offhand, 3×3 crafting, barrel + private ender chest, repeaters, redstone dust, time/weather/difficulty, world border, native portal entry and representative entity families, and emits `hem-1215-certification.json` alongside launcher/restore certificates and screenshot evidence. The workflow runs the real backup/restore helpers through a deterministic local-rclone remote, proves a good restore, then proves automatic rollback after a deliberately invalid destructive restore.
 
 ## Not executable in this sandbox
 
@@ -58,7 +58,7 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - Deterministic Docker+rclone-local cold-backup restore/rollback drill; this proves recovery logic while leaving real Cloudflare R2 transport as a separate final manual requirement.
 - `npm run parity` reports the machine-parsed ledger; `npm run release:guard` uses the finite `docs/RELEASE_BLOCKERS.md` promotion list rather than requiring every compatibility-roadmap row to be PASS, while still requiring pinned 60-minute certification for final 1.0.0.
 - 86/86 local tests and 54/54 release contracts.
-- Browser refresh recovery via a five-minute rotating one-use in-memory resume lease delivered over `hem:session`; the original launch token remains one-use and URL-fragment-only.
+- Browser refresh recovery via a five-minute browser-local reconnect lease seeded once over `hem:session`; the original launch token remains one-use and URL-fragment-only, and fresh launch authorization revokes the prior reconnect lease.
 - Post-auth skin profile re-announcement plus reciprocal two-browser custom-texture fetch assertions.
 - Test-only forced Paper crash endpoint, gated by `HEM_ENABLE_TEST_FAULTS`, with world/player persistence recovery assertions.
 - Relocatable R2 backup checksums and guarded restore/rollback helper.
@@ -174,6 +174,17 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - Root-cause tracing found the RC30 browser started `/hem lease` in the same authorization tick as `/hem auth`/`/hem resume` and retried every 250 ms for up to 40 attempts. The server authorization is asynchronous, so this generated repeated signed command traffic before the current physical connection had been confirmed authorized and before Paper was guaranteed to expose `hem:session`.
 - RC31 waits for Paper's explicit `HEM: connected` / `HEM: resumed` confirmation before requesting a lease, then uses a bounded six-attempt 1.5-second retry cadence. The launch/resume credential path stays one-use and the lease request remains secret-free.
 - HEMGate now emits secret-free live diagnostics when `hem:session` is registered, when a lease request is waiting on channel registration, and when a lease is issued. The initial lease acceptance failure now prints browser authorization/resume state and the Paper log tail, matching the existing refresh-resume diagnostic path.
+
+
+## RC34 retained reconnect-lease repair
+
+- The complete RC33 CI log identifies every browser HTTP 400 as a PlayerDB profile lookup miss for the synthetic offline-mode names `HEM_Huds_1a2b3` / `HEM_Elis_4d5e6`; those responses are unrelated to Paper world readiness or the HEM WebSocket proxy.
+- RC33 then proves the refreshed Hudson connection authenticates with `/hem resume`, Paper observes `hem:session`, and HEMGate logs `Resume lease issued`, while browser parity still reports `received: 0`. The remaining failure boundary is therefore the second Paper custom-payload delivery, not token generation or resume authorization.
+- RC34 makes the already-delivered five-minute reconnect lease reusable until its original absolute expiry. `/hem resume` now looks up rather than consumes that lease, and a fresh `/hem auth` explicitly revokes the player's prior active reconnect token before a replacement can be issued.
+- The browser requests a private lease only after fresh `HEM: connected` authorization. After `HEM: resumed`, it marks the existing `sessionStorage` lease retained and does not depend on another `hem:session` payload to complete refresh recovery.
+- The live acceptance refresh gate now requires confirmed resumed authorization plus the retained browser-local lease; it no longer requires a rotated payload after reconnect. Initial private plugin-channel lease delivery is still mandatory and separately gated.
+- The same RC33 log also shows both original Paper connections timing out at roughly one minute before the deliberate refresh. RC34 does not claim that separate longevity issue fixed; it remains observable by the later proxy/reliability/soak gates and will be handled from keep-alive evidence rather than conflated with reconnect authorization.
+- Live refresh and long-session recovery remain unclaimed until the exact RC34 artifact passes the two-browser Paper 1.21.5 workflow.
 
 ## RC33 refresh-presence generation repair
 
