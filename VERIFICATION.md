@@ -1,12 +1,12 @@
-# HEM RC35 verification record
+# HEM RC36 verification record
 
-Date: 2026-09-02
+Date: 2026-09-08
 
 ## Completed in the build sandbox
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **127/127 passing** source/logic/security/release-gate tests in the current RC35 local pass.
+- `npm test`: **128/128 passing** source/logic/security/release-gate tests in the current RC36 local pass.
 - `npm run verify`: **57/57 release contracts passing**.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
@@ -123,7 +123,7 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - The RC27 live workflow passed `client.registry-renderer`, `client.capability-contract`, `world.seed-authority`, `client.settings-transport`, and `profile.remote-skins`, then failed waiting for Hudson's one-use resume lease while both browser WebSockets entered CLOSING/CLOSED state.
 - RC28 makes the browser call `registerChannel('hem:session', ['restBuffer', []], true)` before sending `/hem auth` or `/hem resume`, records registration in secret-free parity diagnostics, and listens to the named plugin-channel event while retaining raw `custom_payload` fallbacks.
 - HEMGate now delays lease generation until Paper reports `hem:session` in `Player#getListeningPluginChannels()`, retrying for a bounded four-second window instead of sending a one-use secret into an unregistered channel. A lease is generated only after the channel is ready.
-- The HEM websocket/TCP bridge no longer passes the former hard-coded `timeout: 30_000` option. Destination allowlisting remains unchanged; Minecraft protocol keepalives, browser disconnects, Paper shutdown, and HEM idle/world lifecycle remain the connection lifetime authorities. This is required for the real 60-minute soak rather than a 30-second transport cap.
+- RC28 removed the former hard-coded `timeout: 30_000` option, but later root-cause tracing in RC36 found that omitting timeout options still inherited `net-browserify`'s upstream established-socket default `connectionTimeout = 5000`. RC36 therefore makes the intended policy explicit: `connectTimeout: 5000` only for opening a TCP connection and `connectionTimeout: 0` after the WebSocket/TCP tunnel is established. Destination allowlisting remains unchanged; Minecraft protocol keepalives, browser disconnects, Paper shutdown, and HEM idle/world lifecycle are the long-session lifetime authorities.
 - System Acceptance now requires both browsers to report successful HEM channel registration and requires Hudson's first resume lease before later renderer/profile work, so a broken auth-session channel fails immediately and specifically.
 
 ## RC27 generated sound-map + HTTPS remote-skin acceptance repair
@@ -175,6 +175,14 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - RC31 waits for Paper's explicit `HEM: connected` / `HEM: resumed` confirmation before requesting a lease, then uses a bounded six-attempt 1.5-second retry cadence. The launch/resume credential path stays one-use and the lease request remains secret-free.
 - HEMGate now emits secret-free live diagnostics when `hem:session` is registered, when a lease request is waiting on channel registration, and when a lease is issued. The initial lease acceptance failure now prints browser authorization/resume state and the Paper log tail, matching the existing refresh-resume diagnostic path.
 
+
+## RC36 established TCP idle-timeout repair
+
+- The exact RC35 live workflow passed `client.keepalive-transport` for both Hudson and Elise, proving that the browser receives Paper 1.21.5 keepalives and emits matching responses, but Paper still later logged `lost connection: Timed out` for both original sessions.
+- Root-cause tracing found HEM mounted `net-browserify` without timeout options. Its server API defaults both connection establishment and established-session inactivity to 5000 ms, then calls `socket.setTimeout(connectionTimeout)` when the WebSocket tunnel is attached. That is an unintended five-second TCP idle cutoff beneath Minecraft.
+- RC36 preserves `connectTimeout: 5000` for failed connection attempts but sets `connectionTimeout: 0` for established sessions. Paper/Minecraft keepalives and explicit lifecycle events now own long-session liveness rather than a generic proxy inactivity timer.
+- `tests/proxy-timeout-policy.test.mjs` was written first and observed failing against RC35 semantics, then passed after the single proxy-policy change. RC35's guarded keepalive responder remains active as defense-in-depth.
+- Live longevity remains unclaimed until the exact RC36 artifact passes the pinned two-browser Paper workflow and required soak.
 
 ## RC35 Paper keepalive longevity repair
 
