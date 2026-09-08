@@ -9,7 +9,7 @@
   // Expose a tiny read-only diagnostics surface for HEM's automated acceptance
   // runner. It deliberately contains no launch/resume secrets or profile credentials.
   const parity = {
-    hemVersion: '1.0.0-rc.34',
+    hemVersion: '1.0.0-rc.35',
     target: '1.21.5',
     connected: false,
     build: { checked: false, ok: false, compatibilityMode: '', upstreamRelease1215: null, protocolVerified1215: null, upstreamCommit: '' },
@@ -22,6 +22,7 @@
     resume: { available: false, attempted: false, stored: false, received: 0, leaseRequests: 0, channelRegistered: false, channelRegistrationFailed: false },
     settingsRequested: {},
     packetsSeen: new Set(),
+    transport: { keepAliveSeen: 0, keepAliveResponses: 0, keepAliveFallbacks: 0, keepAliveGuardAttached: false },
     presentation: { damageFlashes: 0, audioEvents: 0 },
     multiplayerEvents: { joined: 0, left: 0 },
     recentMessages: [],
@@ -266,6 +267,19 @@
       }
     })
     const client = bot._client
+    const keepAliveState = globalThis.HEMKeepAliveGuard?.attachHemKeepAliveGuard?.(client)
+    if (keepAliveState) {
+      parity.transport.keepAliveGuardAttached = true
+      const syncKeepAliveState = () => {
+        parity.transport.keepAliveSeen = keepAliveState.seen
+        parity.transport.keepAliveResponses = keepAliveState.responses
+        parity.transport.keepAliveFallbacks = keepAliveState.fallbacks
+      }
+      client?.on?.('packet', (_data, meta) => {
+        if (meta?.name === 'keep_alive') setTimeout(syncKeepAliveState, 5)
+      })
+      syncKeepAliveState()
+    }
     if (client && !client.__hemResumeChannelRegistered && typeof client.registerChannel === 'function') {
       try {
         // Bukkit only considers a player to be listening to a custom plugin channel

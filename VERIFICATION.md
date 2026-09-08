@@ -1,4 +1,4 @@
-# HEM RC34 verification record
+# HEM RC35 verification record
 
 Date: 2026-09-02
 
@@ -6,7 +6,7 @@ Date: 2026-09-02
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **121/121 passing** source/logic/security/release-gate tests in the current RC34 local pass.
+- `npm test`: **127/127 passing** source/logic/security/release-gate tests in the current RC35 local pass.
 - `npm run verify`: **57/57 release contracts passing**.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
@@ -175,6 +175,15 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - RC31 waits for Paper's explicit `HEM: connected` / `HEM: resumed` confirmation before requesting a lease, then uses a bounded six-attempt 1.5-second retry cadence. The launch/resume credential path stays one-use and the lease request remains secret-free.
 - HEMGate now emits secret-free live diagnostics when `hem:session` is registered, when a lease request is waiting on channel registration, and when a lease is issued. The initial lease acceptance failure now prints browser authorization/resume state and the Paper log tail, matching the existing refresh-resume diagnostic path.
 
+
+## RC35 Paper keepalive longevity repair
+
+- The exact RC34 GitHub Actions run shows both original browser sessions joining and rendering successfully, then Paper logs `lost connection: Timed out` for Elise and Hudson before the acceptance runner performs its deliberate refresh. The later `net::ERR_ABORTED` and destroyed Playwright execution context are therefore downstream symptoms, not a launcher/navigation root cause.
+- RC35 ships `apps/client/hem-keepalive-guard.cjs` into the browser before `hem-bridge.js`. It watches each clientbound `keep_alive`, allows the pinned `minecraft-protocol` responder to run first, and emits one fallback response only if no matching response write occurred in that turn. The fallback is idempotent per physical protocol client and cannot double-reply when upstream behaves normally.
+- Secret-free parity diagnostics now expose keepalive packets seen, response writes, fallback count and guard attachment. The required live gate `client.keepalive-transport` demands a real round trip for both Hudson and Elise before later acceptance can continue against a dead session.
+- `hem-build.json` attests `keepAliveGuard: hem-keepalive-guard-v1`, and live acceptance rejects an artifact missing that attestation.
+- The PlayerDB HTTP 400s remain classified as harmless profile lookup misses for HEM synthetic offline-mode usernames; they are not Paper/proxy readiness failures.
+- Long-session recovery remains unclaimed until this exact RC35 artifact passes the two-browser Paper 1.21.5 workflow and its required soak.
 
 ## RC34 retained reconnect-lease repair
 

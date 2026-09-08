@@ -281,11 +281,12 @@ const builtSoundMapBytes = await fsp.readFile(builtSoundMap)
 const builtSoundMapSha256 = createHash('sha256').update(builtSoundMapBytes).digest('hex')
 if (builtSoundMapSha256 !== generatedSoundMapSha256) throw new Error('Built /sounds.js differs from the generated pinned-upstream sound map')
 await fsp.cp(built, dist, { recursive: true })
+await fsp.copyFile(path.join(here, 'hem-keepalive-guard.cjs'), path.join(dist, 'hem-keepalive-guard.js'))
 await fsp.copyFile(path.join(here, 'hem-bridge.js'), path.join(dist, 'hem-bridge.js'))
 
 let html = await fsp.readFile(path.join(dist, 'index.html'), 'utf8')
 html = html.replace(/<title>[\s\S]*?<\/title>/i, '<title>HEM — Minecraft 1.21.5</title>')
-if (!html.includes('hem-bridge.js')) html = html.replace(/<\/body>/i, '<script src="./hem-bridge.js"></script></body>')
+if (!html.includes('hem-bridge.js')) html = html.replace(/<\/body>/i, '<script src="./hem-keepalive-guard.js"></script><script src="./hem-bridge.js"></script></body>')
 await fsp.writeFile(path.join(dist, 'index.html'), html)
 
 // autoConnect=true is ignored by upstream unless this config flag is enabled.
@@ -304,7 +305,7 @@ delete config.defaultProxy
 await fsp.writeFile(configPath, JSON.stringify(config, null, 2) + '\n')
 
 await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
-  hemVersion: '1.0.0-rc.34',
+  hemVersion: '1.0.0-rc.35',
   minecraft: '1.21.5',
   upstreamRepo: repo,
   upstreamRef: ref,
@@ -319,6 +320,7 @@ await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
   pnpmVersion,
   frozenLockfile: true,
   serviceWorkerDisabled: true,
+  keepAliveGuard: 'hem-keepalive-guard-v1',
   soundMap: { source: generatedSoundMapSource, sha256: generatedSoundMapSha256, bytes: generatedSoundMapBytes.length, path: '/sounds.js' },
   prismarineChunkPatch,
   minecraftProtocolRegisterPatch,

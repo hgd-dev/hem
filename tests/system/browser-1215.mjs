@@ -223,6 +223,31 @@ try {
   await waitFor(() => elise.page.evaluate(() => globalThis.__HEM_PARITY__?.build?.checked && globalThis.__HEM_PARITY__?.build?.ok), 'Elise browser build identity attestation', 15_000)
   pass('client.registry-renderer', 'two authenticated browser players + build identity + runtime 1.21.5 registries + rendered chunk sections')
 
+  // Paper disconnects clients that fail to echo its play-state keepalive. The pinned
+  // browser stack has shown an intermittent missing reply path, so HEM installs a
+  // guarded fallback that only replies when the normal protocol client did not.
+  // Prove an actual keepalive round trip for BOTH physical browser connections before
+  // later gates can accidentally continue against a session Paper has already killed.
+  for (const [label, player] of [['Hudson', hudson], ['Elise', elise]]) {
+    try {
+      await waitFor(() => player.page.evaluate(() => {
+        const t = globalThis.__HEM_PARITY__?.transport
+        return Boolean(t?.keepAliveGuardAttached && t.keepAliveSeen >= 1 && t.keepAliveResponses >= t.keepAliveSeen)
+      }), `${label} answers Paper keepalive`, 35_000, 250)
+    } catch (error) {
+      const diagnostic = await player.page.evaluate(() => ({
+        connected: globalThis.__HEM_PARITY__?.connected === true,
+        transport: globalThis.__HEM_PARITY__?.transport || {},
+        packetsSeen: [...(globalThis.__HEM_PARITY__?.packetsSeen || [])].slice(-30),
+      })).catch(() => ({ unavailable: true }))
+      console.error(`${label} keepalive diagnostics:`, JSON.stringify(diagnostic))
+      const paperTail = await recentLogs(SHARED, 100).catch(() => [])
+      console.error(`${label} keepalive Paper tail\n` + paperTail.slice(-50).join('\n'))
+      throw error
+    }
+  }
+  pass('client.keepalive-transport', 'both browser clients receive and answer Paper 1.21.5 keepalive packets without duplicate replies')
+
   const liveBuildIdentity = JSON.parse(await fs.readFile('apps/client/dist/hem-build.json', 'utf8'))
   const requiredCapabilities = ['keybindings','renderDistanceSetting','rawMouseInput','resourcePackTextures','creativeInventory','debugOverlay','thirdPerson','sounds']
   const missingCapabilities = requiredCapabilities.filter(name => liveBuildIdentity.capabilities?.[name] !== true)
@@ -233,6 +258,7 @@ try {
   if (!/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamPackageSha256 || '') || !/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamLockSha256 || '')) throw new Error('Built browser client is missing frozen v0.1.99 package/lock provenance')
   if (liveBuildIdentity.frozenLockfile !== true) throw new Error('Built browser client did not use the pinned v0.1.99 frozen lockfile')
   if (liveBuildIdentity.serviceWorkerDisabled !== true) throw new Error('HEM browser build must disable the upstream service worker for deterministic refresh/reconnect')
+  if (liveBuildIdentity.keepAliveGuard !== 'hem-keepalive-guard-v1') throw new Error('HEM browser build is missing the guarded Paper keepalive fallback')
   if (liveBuildIdentity.compatibilityMode !== 'pinned-v0.1.99-lockfile-1215-verified' || liveBuildIdentity.protocolVerified1215 !== true) throw new Error(`HEM 1.21.5 requires pinned v0.1.99 frozen dependencies plus verified protocol/data; got ${liveBuildIdentity.compatibilityMode}`)
   const soundMapBytes = await fs.readFile('apps/client/dist/sounds.js')
   const soundMapSha256 = createHash('sha256').update(soundMapBytes).digest('hex')
