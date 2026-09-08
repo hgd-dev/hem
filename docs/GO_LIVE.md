@@ -1,4 +1,4 @@
-# HEM RC36 — go live
+# HEM RC37 — go live
 
 This is the shortest safe path from the source ZIP to a playable public HEM deployment.
 
@@ -21,7 +21,7 @@ Do not expose HEM to normal play until the second workflow prints:
 HEM 1.21.5 SYSTEM ACCEPTANCE PASSED
 ```
 
-That workflow first certifies the launcher’s WebGL Classic/Slim 3D skin preview and legacy-skin normalization, then builds the actual browser client, boots exact Paper 1.21.5 build 114 and launches two Chromium clients. It first requires both browser clients to receive and answer real Paper keepalive packets, then checks rendered chunks, real-time Mineflayer + normal-keyboard movement/jump/fall including one-block obstacle traversal, mining/placement plus post-placement renderer stability, commands, armor/offhand, lever + repeater + redstone-dust propagation, chest/barrel/shulker/private ender chest, 2×2 + 3×3 crafting, furnace/smoker/blast-furnace processing, minecart riding, dropped items, fluids, pistons/hoppers, 1.21.5-only content, representative entity families, reciprocal custom-skin fetches, refresh/reconnect, a real proxy stop/start + same-tab resume, chat stability, combat/knockback/fall damage, hunger/death/respawn, time/weather/difficulty, world-border constraint, command dimension transfer + native Nether/End portal entry, a 60-minute soak, forced Paper crash recovery, full restarts, multiplayer + isolated Singleplayer persistence, and a deterministic cold-backup restore + rollback drill. It then independently verifies launcher, gameplay and restore certificates.
+That workflow first certifies the launcher’s WebGL Classic/Slim 3D skin preview and legacy-skin normalization, then builds the actual browser client, boots exact Paper 1.21.5 build 114 and launches two Chromium clients. It first requires each browser client to survive at least three real Paper keepalive round trips over the ordered ArrayBuffer TCP shim, then checks rendered chunks, real-time Mineflayer + normal-keyboard movement/jump/fall including one-block obstacle traversal, mining/placement plus post-placement renderer stability, commands, armor/offhand, lever + repeater + redstone-dust propagation, chest/barrel/shulker/private ender chest, 2×2 + 3×3 crafting, furnace/smoker/blast-furnace processing, minecart riding, dropped items, fluids, pistons/hoppers, 1.21.5-only content, representative entity families, reciprocal custom-skin fetches, refresh/reconnect, a real proxy stop/start + same-tab resume, chat stability, combat/knockback/fall damage, hunger/death/respawn, time/weather/difficulty, world-border constraint, command dimension transfer + native Nether/End portal entry, a 60-minute soak, forced Paper crash recovery, full restarts, multiplayer + isolated Singleplayer persistence, and a deterministic cold-backup restore + rollback drill. It then independently verifies launcher, gameplay and restore certificates.
 
 ## C. Create Cloudflare D1
 

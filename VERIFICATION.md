@@ -1,4 +1,4 @@
-# HEM RC36 verification record
+# HEM RC37 verification record
 
 Date: 2026-09-08
 
@@ -6,7 +6,7 @@ Date: 2026-09-08
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **128/128 passing** source/logic/security/release-gate tests in the current RC36 local pass.
+- `npm test`: **134/134 passing** source/logic/security/release-gate tests in the current RC37 local pass.
 - `npm run verify`: **57/57 release contracts passing**.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
@@ -219,3 +219,11 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - `hem-build.json` now attests `serviceWorkerDisabled: true`, and `npm run doctor:system`, HEM CI, live System Acceptance and production Cloudflare deployment all reject a browser artifact missing that attestation. A dedicated regression test fails if the build stops enforcing the upstream no-service-worker switch.
 - Live refresh recovery remains unclaimed until the exact RC32 artifact passes the two-browser Paper 1.21.5 workflow.
 
+
+## RC37 ordered browser TCP transport repair
+
+- RC36 proved that disabling the proxy server's established-socket idle timeout was insufficient: both browsers still passed the initial keepalive check and Paper later timed both sessions out.
+- The exact frozen v0.1.99 lockfile resolves `net-browserify` to commit `e754999ffdea67853bc9b10553b5e9908b40f618`. Its historical browser receive path leaves binary WebSocket messages as `Blob`s and launches independent asynchronous `FileReader`s before pushing each resulting buffer into the TCP stream.
+- RC37 applies `hem-net-browserify-arraybuffer-ordering-v1` after the frozen dependency install. The patch sets WebSocket `binaryType = 'arraybuffer'`, handles `ArrayBuffer` messages synchronously, and emits a runtime-resolved build attestation. This preserves WebSocket event order as Minecraft TCP byte order instead of depending on asynchronous Blob conversion completion order.
+- System Acceptance now requires at least three keepalive challenge/response observations per physical browser connection before declaring `client.keepalive-transport` and records protocol-client errors/end reasons in diagnostics.
+- Live longevity remains unclaimed until the exact RC37 artifact passes the pinned two-browser Paper workflow and required soak.

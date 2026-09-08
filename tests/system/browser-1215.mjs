@@ -232,8 +232,8 @@ try {
     try {
       await waitFor(() => player.page.evaluate(() => {
         const t = globalThis.__HEM_PARITY__?.transport
-        return Boolean(t?.keepAliveGuardAttached && t.keepAliveSeen >= 1 && t.keepAliveResponses >= t.keepAliveSeen)
-      }), `${label} answers Paper keepalive`, 35_000, 250)
+        return Boolean(t?.keepAliveGuardAttached && t.keepAliveSeen >= 3 && t.keepAliveResponses >= t.keepAliveSeen)
+      }), `${label} sustains Paper keepalive round trips`, 55_000, 250)
     } catch (error) {
       const diagnostic = await player.page.evaluate(() => ({
         connected: globalThis.__HEM_PARITY__?.connected === true,
@@ -246,7 +246,7 @@ try {
       throw error
     }
   }
-  pass('client.keepalive-transport', 'both browser clients receive and answer Paper 1.21.5 keepalive packets without duplicate replies')
+  pass('client.keepalive-transport', 'both browser clients prove sustained Paper 1.21.5 keepalive round trips without duplicate replies')
 
   const liveBuildIdentity = JSON.parse(await fs.readFile('apps/client/dist/hem-build.json', 'utf8'))
   const requiredCapabilities = ['keybindings','renderDistanceSetting','rawMouseInput','resourcePackTextures','creativeInventory','debugOverlay','thirdPerson','sounds']
@@ -259,6 +259,7 @@ try {
   if (liveBuildIdentity.frozenLockfile !== true) throw new Error('Built browser client did not use the pinned v0.1.99 frozen lockfile')
   if (liveBuildIdentity.serviceWorkerDisabled !== true) throw new Error('HEM browser build must disable the upstream service worker for deterministic refresh/reconnect')
   if (liveBuildIdentity.keepAliveGuard !== 'hem-keepalive-guard-v1') throw new Error('HEM browser build is missing the guarded Paper keepalive fallback')
+  if (liveBuildIdentity.netBrowserifyOrderingPatch?.patchId !== 'hem-net-browserify-arraybuffer-ordering-v1' || liveBuildIdentity.netBrowserifyOrderingPatch?.runtimeResolved !== true || liveBuildIdentity.netBrowserifyOrderingPatch?.binaryType !== 'arraybuffer' || liveBuildIdentity.netBrowserifyOrderingPatch?.orderedBinaryDelivery !== true || liveBuildIdentity.netBrowserifyOrderingPatch?.avoidsAsyncBlobPath !== true) throw new Error('HEM browser build is missing the ordered net-browserify ArrayBuffer transport patch')
   if (liveBuildIdentity.compatibilityMode !== 'pinned-v0.1.99-lockfile-1215-verified' || liveBuildIdentity.protocolVerified1215 !== true) throw new Error(`HEM 1.21.5 requires pinned v0.1.99 frozen dependencies plus verified protocol/data; got ${liveBuildIdentity.compatibilityMode}`)
   const soundMapBytes = await fs.readFile('apps/client/dist/sounds.js')
   const soundMapSha256 = createHash('sha256').update(soundMapBytes).digest('hex')
@@ -2793,6 +2794,7 @@ try {
     pnpmVersion: buildIdentity.pnpmVersion,
     frozenLockfile: buildIdentity.frozenLockfile === true,
     prismarineChunkPatch: buildIdentity.prismarineChunkPatch,
+    netBrowserifyOrderingPatch: buildIdentity.netBrowserifyOrderingPatch,
     soundMap: buildIdentity.soundMap,
     compatibilityMode: buildIdentity.compatibilityMode,
     soakMinutes: SOAK_MINUTES,

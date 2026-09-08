@@ -9,7 +9,7 @@
   // Expose a tiny read-only diagnostics surface for HEM's automated acceptance
   // runner. It deliberately contains no launch/resume secrets or profile credentials.
   const parity = {
-    hemVersion: '1.0.0-rc.36',
+    hemVersion: '1.0.0-rc.37',
     target: '1.21.5',
     connected: false,
     build: { checked: false, ok: false, compatibilityMode: '', upstreamRelease1215: null, protocolVerified1215: null, upstreamCommit: '' },
@@ -22,7 +22,7 @@
     resume: { available: false, attempted: false, stored: false, received: 0, leaseRequests: 0, channelRegistered: false, channelRegistrationFailed: false },
     settingsRequested: {},
     packetsSeen: new Set(),
-    transport: { keepAliveSeen: 0, keepAliveResponses: 0, keepAliveFallbacks: 0, keepAliveGuardAttached: false },
+    transport: { keepAliveSeen: 0, keepAliveResponses: 0, keepAliveFallbacks: 0, keepAliveGuardAttached: false, clientEndReason: '', clientErrors: [] },
     presentation: { damageFlashes: 0, audioEvents: 0 },
     multiplayerEvents: { joined: 0, left: 0 },
     recentMessages: [],
@@ -267,6 +267,14 @@
       }
     })
     const client = bot._client
+    client?.on?.('error', error => {
+      const text = typeof error?.message === 'string' ? error.message : String(error || 'unknown client error')
+      parity.transport.clientErrors.push(text.slice(0, 300))
+      if (parity.transport.clientErrors.length > 8) parity.transport.clientErrors.shift()
+    })
+    client?.on?.('end', reason => {
+      parity.transport.clientEndReason = typeof reason === 'string' ? reason : String(reason || '')
+    })
     const keepAliveState = globalThis.HEMKeepAliveGuard?.attachHemKeepAliveGuard?.(client)
     if (keepAliveState) {
       parity.transport.keepAliveGuardAttached = true
