@@ -1,4 +1,4 @@
-# HEM RC37 — go live
+# HEM RC38 — go live
 
 This is the shortest safe path from the source ZIP to a playable public HEM deployment.
 

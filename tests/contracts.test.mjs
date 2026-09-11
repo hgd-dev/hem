@@ -433,10 +433,10 @@ test('system acceptance proves reconnect after a real transient proxy outage',()
   const system=read('tests/system/browser-1215.mjs')
   assert.match(system,/docker.*compose.*tests\/system\/docker-compose\.yml/s)
   assert.match(system,/compose\('stop', '-t', '15', 'proxy'\)/)
-  assert.match(system,/Hudson observes proxy outage/)
-  assert.match(system,/Elise observes proxy outage/)
+  assert.match(system,/Hudson physical generation ends during proxy outage/)
+  assert.match(system,/Elise physical generation ends during proxy outage/)
   assert.match(system,/compose\('start', 'proxy'\)/)
-  assert.match(system,/transient proxy outage \+ same-tab resume recovery/)
+  assert.match(system,/proxy outage ends both physical generations; proxy restart creates fresh resume-authenticated generations/)
 })
 
 test('certification workflow includes a real 60-minute two-browser soak',()=>{

@@ -1,13 +1,13 @@
-# HEM RC37 verification record
+# HEM RC38 verification record
 
-Date: 2026-09-08
+Date: 2026-09-11
 
 ## Completed in the build sandbox
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **134/134 passing** source/logic/security/release-gate tests in the current RC37 local pass.
-- `npm run verify`: **57/57 release contracts passing**.
+- `npm test`: **141/141 passing** source/logic/security/release-gate tests in the current RC38 local pass.
+- `npm run verify`: **58/58 release contracts passing**.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
 - HEM browser build script checks out the exact v0.1.99 stable-release commit `0359f20b8d721ea44c7ddb633c985a71574c73d3`, preserves and hashes its checked-in `package.json` + `pnpm-lock.yaml`, installs with the upstream-declared pnpm version and `--frozen-lockfile`, forces the 1.21.5 version gate, enables auto-connect, and refuses to bundle unless the resulting installed graph resolves Minecraft 1.21.5 / protocol 770 / DataVersion 4325 with complete registry round-trips and the native Spring to Life item-definition layer.
@@ -227,3 +227,13 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - RC37 applies `hem-net-browserify-arraybuffer-ordering-v1` after the frozen dependency install. The patch sets WebSocket `binaryType = 'arraybuffer'`, handles `ArrayBuffer` messages synchronously, and emits a runtime-resolved build attestation. This preserves WebSocket event order as Minecraft TCP byte order instead of depending on asynchronous Blob conversion completion order.
 - System Acceptance now requires at least three keepalive challenge/response observations per physical browser connection before declaring `client.keepalive-transport` and records protocol-client errors/end reasons in diagnostics.
 - Live longevity remains unclaimed until the exact RC37 artifact passes the pinned two-browser Paper workflow and required soak.
+
+## RC38 physical connection lifecycle certification
+
+- RC37's live workflow reached sustained keepalives, settings, skins and refresh/resume, but later evidence showed that page-wide transport counters could aggregate across an expired physical client and its replacement. A reconnect could therefore make `client.keepalive-transport` look green even though the original socket had died.
+- RC38 assigns every physical `bot._client` lifetime a same-tab monotonically increasing generation ID. The counter persists only in `sessionStorage`, so a full browser reload continues the generation sequence without persisting any secret.
+- Keepalive observations, client errors/end reason, authorization state and resume-channel registration are generation-scoped. A dead generation cannot donate counters or successful authorization state to a replacement generation.
+- The one-use fragment launch token may authorize only the first eligible generation. Every later physical generation reuses the existing short-lived browser-local reconnect lease exactly once for that generation.
+- System Acceptance now holds Hudson and Elise on one unchanged physical generation for the complete keepalive observation window, fails if the generation changes or ends, and requires at least three keepalive responses on that same generation.
+- Refresh and transient proxy-outage gates now require fresh generation IDs plus generation-local `resume` authorization success before renderer/gameplay acceptance continues.
+- Live longevity remains unclaimed until the exact RC38 artifact passes the pinned two-browser Paper workflow and required soak. If an unchanged generation still answers keepalives correctly yet Paper later times out, RC39 escalates to a purpose-built HEM WebSocket-to-TCP gateway instead of adding another lifecycle heuristic.

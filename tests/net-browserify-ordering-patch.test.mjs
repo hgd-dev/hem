@@ -67,7 +67,7 @@ test('live acceptance requires the ordered transport attestation and multiple ke
   const system = fs.readFileSync('tests/system/browser-1215.mjs', 'utf8')
   assert.match(system, /netBrowserifyOrderingPatch/)
   assert.match(system, /hem-net-browserify-arraybuffer-ordering-v1/)
-  assert.match(system, /keepAliveSeen >= 3/)
+  assert.match(system, /finalState\.seen < 3/)
   assert.match(system, /sustained Paper 1\.21\.5 keepalive/)
 })
 

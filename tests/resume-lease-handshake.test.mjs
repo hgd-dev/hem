@@ -53,8 +53,8 @@ test('authorization ownership is connection-scoped so an old quit cannot deautho
 
 test('live acceptance isolates initial private lease delivery from reconnect lease reuse', () => {
   const acceptance = fs.readFileSync('tests/system/browser-1215.mjs', 'utf8')
-  assert.match(acceptance, /Hudson refresh attempts stored lease/)
-  assert.match(acceptance, /Hudson refresh reuses short-lived reconnect lease/)
+  assert.match(acceptance, /Hudson refresh creates a new resume-authenticated physical generation/)
+  assert.match(acceptance, /retained short-lived reconnect lease/)
   assert.match(acceptance, /Hudson refresh resume diagnostics/)
   assert.match(acceptance, /Hudson initial resume lease diagnostics/)
 })
@@ -77,6 +77,7 @@ test('browser reuses the stored reconnect lease after resume without requiring a
 
 test('live acceptance proves reconnect authorization using the retained lease instead of requiring rotated payload delivery', () => {
   const acceptance = fs.readFileSync('tests/system/browser-1215.mjs', 'utf8')
-  assert.match(acceptance, /Hudson refresh reuses short-lived reconnect lease/)
+  assert.match(acceptance, /Hudson refresh creates a new resume-authenticated physical generation/)
+  assert.match(acceptance, /retained short-lived reconnect lease/)
   assert.doesNotMatch(acceptance, /Hudson refresh receives rotated lease/)
 })

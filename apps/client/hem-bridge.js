@@ -5,11 +5,18 @@
   const username = query.get('username') || ''
   const destination = query.get('ip') || ''
   const resumeKey = `hem.resume.1:${username}:${destination}`
+  const generationKey = `hem.connection-generation.1:${username}:${destination}`
+  const canonicalRecoveryUrl = `${location.pathname}${location.search}`
+  let initialGenerationId = 1
+  try {
+    const storedGenerationId = Number.parseInt(sessionStorage.getItem(generationKey) || '0', 10)
+    if (Number.isSafeInteger(storedGenerationId) && storedGenerationId >= 0) initialGenerationId = storedGenerationId + 1
+  } catch {}
 
   // Expose a tiny read-only diagnostics surface for HEM's automated acceptance
   // runner. It deliberately contains no launch/resume secrets or profile credentials.
   const parity = {
-    hemVersion: '1.0.0-rc.37',
+    hemVersion: '1.0.0-rc.38',
     target: '1.21.5',
     connected: false,
     build: { checked: false, ok: false, compatibilityMode: '', upstreamRelease1215: null, protocolVerified1215: null, upstreamCommit: '' },
@@ -19,15 +26,67 @@
     entitiesSeen: new Set(),
     dimensionsSeen: new Set(),
     renderer: { checked: false, healthy: false, sections: 0 },
-    resume: { available: false, attempted: false, stored: false, received: 0, leaseRequests: 0, channelRegistered: false, channelRegistrationFailed: false },
+    resume: { available: false, attempted: false, stored: false, received: 0, leaseRequests: 0, channelRegistered: false, channelRegistrationFailed: false, recoveryUrlReady: Boolean(canonicalRecoveryUrl) },
     settingsRequested: {},
     packetsSeen: new Set(),
     transport: { keepAliveSeen: 0, keepAliveResponses: 0, keepAliveFallbacks: 0, keepAliveGuardAttached: false, clientEndReason: '', clientErrors: [] },
     presentation: { damageFlashes: 0, audioEvents: 0 },
     multiplayerEvents: { joined: 0, left: 0 },
     recentMessages: [],
+    connection: { nextGenerationId: initialGenerationId, activeGenerationId: null, generations: [] },
   }
   Object.defineProperty(globalThis, '__HEM_PARITY__', { value: parity, configurable: false, writable: false })
+
+  const connection = parity.connection
+  const generationByClient = new WeakMap()
+  const currentGeneration = () => connection.generations.find(entry => entry.id === connection.activeGenerationId) || null
+  const isActiveGeneration = generation => connection.activeGenerationId === generation?.id
+  const endGeneration = generation => {
+    if (!generation) return
+    generation.connected = false
+    if (!generation.endedAt) generation.endedAt = Date.now()
+    if (isActiveGeneration(generation)) parity.connected = false
+  }
+  const beginGeneration = client => {
+    if (!client || (typeof client !== 'object' && typeof client !== 'function')) return null
+    const existing = generationByClient.get(client)
+    if (existing) return existing
+    const prior = currentGeneration()
+    if (prior && !prior.endedAt) endGeneration(prior)
+    const generation = {
+      id: connection.nextGenerationId++,
+      startedAt: Date.now(),
+      endedAt: 0,
+      connected: false,
+      keepAliveSeen: 0,
+      keepAliveResponses: 0,
+      keepAliveFallbacks: 0,
+      keepAliveGuardAttached: false,
+      clientEndReason: '',
+      clientErrors: [],
+      authorization: { mode: '', attempted: false, authenticated: false, failed: false },
+      resumeChannelRegistered: false,
+    }
+    generationByClient.set(client, generation)
+    try { sessionStorage.setItem(generationKey, String(generation.id)) } catch {}
+    connection.generations.push(generation)
+    if (connection.generations.length > 8) connection.generations.shift()
+    connection.activeGenerationId = generation.id
+    return generation
+  }
+  const mirrorAuthorization = generation => {
+    if (!isActiveGeneration(generation)) return
+    Object.assign(parity.authorization, generation.authorization)
+  }
+  const mirrorTransport = generation => {
+    if (!isActiveGeneration(generation)) return
+    parity.transport.keepAliveSeen = generation.keepAliveSeen
+    parity.transport.keepAliveResponses = generation.keepAliveResponses
+    parity.transport.keepAliveFallbacks = generation.keepAliveFallbacks
+    parity.transport.keepAliveGuardAttached = generation.keepAliveGuardAttached === true
+    parity.transport.clientEndReason = generation.clientEndReason
+    parity.transport.clientErrors = [...generation.clientErrors]
+  }
 
   let fatalShown = false
   const showFatal = (code, message) => {
@@ -161,7 +220,7 @@
 
   let lastResumeToken = ''
   let leaseRequestTimer = null
-  const captureResumePacket = packet => {
+  const captureResumePacket = (packet, generation = currentGeneration()) => {
     const channel = packet?.channel || packet?.channelName || packet?.tag || ''
     if (channel !== 'hem:session') return
     const value = decodePayload(packet?.data ?? packet?.payload ?? packet?.value).trim()
@@ -173,8 +232,11 @@
       parity.resume.stored = true
       parity.resume.received++
       if (leaseRequestTimer) { clearInterval(leaseRequestTimer); leaseRequestTimer = null }
-      parity.authorization.authenticated = true
-      parity.authorization.failed = false
+      if (generation) {
+        generation.authorization.authenticated = true
+        generation.authorization.failed = false
+        mirrorAuthorization(generation)
+      }
     } catch (error) {
       console.error('HEM could not store the short-lived resume session:', error)
     }
@@ -203,15 +265,28 @@
   }
 
   const attachDiagnostics = bot => {
-    if (bot.__hemDiagnosticsAttached) return
+    const client = bot?._client
+    const generation = beginGeneration(client)
+    if (!generation) return null
+    generation.connected = Boolean(bot.entity)
+    if (isActiveGeneration(generation)) {
+      parity.connected = generation.connected
+      mirrorAuthorization(generation)
+      mirrorTransport(generation)
+      parity.resume.channelRegistered = generation.resumeChannelRegistered === true
+      parity.resume.channelRegistrationFailed = false
+    }
+    if (bot.__hemDiagnosticsClient === client) return generation
+    bot.__hemDiagnosticsClient = client
     bot.__hemDiagnosticsAttached = true
-    parity.connected = Boolean(bot.entity)
     checkRegistry(bot)
     readResume()
     const noteDimension = () => parity.dimensionsSeen.add(String(bot.game?.dimension || 'unknown'))
     noteDimension()
     bot.on?.('spawn', () => {
-      parity.connected = true; noteDimension(); setTimeout(sampleRenderer, 750)
+      generation.connected = true
+      if (isActiveGeneration(generation)) parity.connected = true
+      noteDimension(); setTimeout(sampleRenderer, 750)
       setTimeout(() => {
         sampleRenderer()
         if (parity.connected && parity.registry.ok && !parity.renderer.healthy) {
@@ -238,12 +313,14 @@
       // short-lived reconnect lease, so reconnect correctness no longer depends on
       // Paper -> browser custom-payload delivery working a second time.
       if (/HEM:\s+connected\s+to\b/i.test(text)) {
-        parity.authorization.authenticated = true
-        parity.authorization.failed = false
+        generation.authorization.authenticated = true
+        generation.authorization.failed = false
+        mirrorAuthorization(generation)
         requestResumeLease(bot)
       } else if (/HEM:\s+resumed\s+to\b/i.test(text)) {
-        parity.authorization.authenticated = true
-        parity.authorization.failed = false
+        generation.authorization.authenticated = true
+        generation.authorization.failed = false
+        mirrorAuthorization(generation)
         parity.resume.stored = Boolean(readResume())
       }
     })
@@ -251,37 +328,43 @@
     bot.on?.('playerLeft', () => { parity.multiplayerEvents.left++ })
     bot._client?.on?.('packet', (_data, meta) => { if (meta?.name) parity.packetsSeen.add(meta.name) })
     bot.on?.('kicked', reason => {
-      parity.connected = false
-      if (parity.authorization.attempted && !parity.authorization.authenticated) {
-        parity.authorization.failed = true
+      endGeneration(generation)
+      if (generation.authorization.attempted && !generation.authorization.authenticated) {
+        generation.authorization.failed = true
+        mirrorAuthorization(generation)
         const detail = typeof reason?.toString === 'function' ? reason.toString() : String(reason || '')
         showFatal('authorization', `The Paper server rejected or expired this HEM launch session${detail ? `: ${detail.slice(0, 240)}` : '.'}`)
       }
     })
     bot.on?.('end', () => {
-      parity.connected = false
+      endGeneration(generation)
       if (leaseRequestTimer) { clearInterval(leaseRequestTimer); leaseRequestTimer = null }
-      if (parity.authorization.attempted && !parity.authorization.authenticated) {
-        parity.authorization.failed = true
+      if (generation.authorization.attempted && !generation.authorization.authenticated) {
+        generation.authorization.failed = true
+        mirrorAuthorization(generation)
         showFatal('authorization', 'The connection ended before HEM authorization completed. Return to the HEM world menu and launch again.')
       }
     })
-    const client = bot._client
     client?.on?.('error', error => {
       const text = typeof error?.message === 'string' ? error.message : String(error || 'unknown client error')
-      parity.transport.clientErrors.push(text.slice(0, 300))
-      if (parity.transport.clientErrors.length > 8) parity.transport.clientErrors.shift()
+      generation.clientErrors.push(text.slice(0, 300))
+      if (generation.clientErrors.length > 8) generation.clientErrors.shift()
+      mirrorTransport(generation)
     })
     client?.on?.('end', reason => {
-      parity.transport.clientEndReason = typeof reason === 'string' ? reason : String(reason || '')
+      const text = typeof reason === 'string' ? reason : String(reason || '')
+      generation.clientEndReason = text
+      endGeneration(generation)
+      mirrorTransport(generation)
     })
     const keepAliveState = globalThis.HEMKeepAliveGuard?.attachHemKeepAliveGuard?.(client)
     if (keepAliveState) {
-      parity.transport.keepAliveGuardAttached = true
+      generation.keepAliveGuardAttached = true
       const syncKeepAliveState = () => {
-        parity.transport.keepAliveSeen = keepAliveState.seen
-        parity.transport.keepAliveResponses = keepAliveState.responses
-        parity.transport.keepAliveFallbacks = keepAliveState.fallbacks
+        generation.keepAliveSeen = keepAliveState.seen
+        generation.keepAliveResponses = keepAliveState.responses
+        generation.keepAliveFallbacks = keepAliveState.fallbacks
+        mirrorTransport(generation)
       }
       client?.on?.('packet', (_data, meta) => {
         if (meta?.name === 'keep_alive') setTimeout(syncKeepAliveState, 5)
@@ -297,49 +380,58 @@
         // generic custom_payload event shape across historical protocol builds.
         client.registerChannel('hem:session', ['restBuffer', []], true)
         client.__hemResumeChannelRegistered = true
-        parity.resume.channelRegistered = true
-        client.on?.('hem:session', data => captureResumePacket({ channel: 'hem:session', data }))
+        generation.resumeChannelRegistered = true
+        if (isActiveGeneration(generation)) parity.resume.channelRegistered = true
+        client.on?.('hem:session', data => captureResumePacket({ channel: 'hem:session', data }, generation))
       } catch (error) {
-        parity.resume.channelRegistrationFailed = true
+        if (isActiveGeneration(generation)) parity.resume.channelRegistrationFailed = true
         console.error('HEM could not register the resume plugin channel:', error)
       }
     }
-    client?.on?.('custom_payload', captureResumePacket)
-    client?.on?.('packet', (data, meta) => { if (meta?.name === 'custom_payload') captureResumePacket(data) })
-    bot.on?.('customPayload', captureResumePacket)
+    client?.on?.('custom_payload', packet => captureResumePacket(packet, generation))
+    client?.on?.('packet', (data, meta) => { if (meta?.name === 'custom_payload') captureResumePacket(data, generation) })
+    bot.on?.('customPayload', packet => captureResumePacket(packet, generation))
+    return generation
   }
 
-  let sent = false
-  let tries = 0
-  const timer = setInterval(() => {
-    tries++
-    const bot = globalThis.bot
-    if (bot?.entity) { attachDiagnostics(bot); sampleRenderer() }
-    if (!sent && bot?.entity && typeof bot.chat === 'function') {
-      if (token) {
-        sent = true
-        parity.authorization.mode = 'launch'
-        parity.authorization.attempted = true
-        // A fresh launch supersedes any old short-lived resume lease for this tab.
-        try { sessionStorage.removeItem(resumeKey) } catch {}
-        // Browser URL fragments never reach Cloudflare/the proxy, and we erase it
-        // only when the bot is ready to consume it. The token is never copied into
-        // diagnostics, localStorage, query parameters, or logs.
-        history.replaceState(null, '', location.pathname + location.search)
-        bot.chat(`/hem auth ${token}`)
-      } else {
-        const resume = readResume()
-        if (resume) {
-          sent = true
-          parity.resume.attempted = true
-          parity.authorization.mode = 'resume'
-          parity.authorization.attempted = true
-          bot.chat(`/hem resume ${resume}`)
-        }
-      }
+  let launchTokenConsumed = false
+  const authorizeGeneration = (bot, generation) => {
+    if (!generation || !bot?.entity || typeof bot.chat !== 'function' || generation.authorization.attempted) return false
+    if (token && !launchTokenConsumed) {
+      launchTokenConsumed = true
+      generation.authorization.mode = 'launch'
+      generation.authorization.attempted = true
+      generation.authorization.authenticated = false
+      generation.authorization.failed = false
+      mirrorAuthorization(generation)
+      // A fresh launch supersedes any old short-lived resume lease for this tab.
+      try { sessionStorage.removeItem(resumeKey) } catch {}
+      // Browser URL fragments never reach Cloudflare/the proxy, and we erase it
+      // only when the bot is ready to consume it. The token is never copied into
+      // diagnostics, localStorage, query parameters, or logs.
+      history.replaceState(null, '', canonicalRecoveryUrl)
+      bot.chat(`/hem auth ${token}`)
+      return true
     }
-    const hasCredential = Boolean(token || readResume())
-    if (tries > 600 || (!hasCredential && bot?.entity)) clearInterval(timer)
-    if (tries > 600 && !sent) console.error('HEM authorization bridge timed out waiting for a launch or resume session')
+    const resume = readResume()
+    if (!resume) return false
+    generation.authorization.mode = 'resume'
+    generation.authorization.attempted = true
+    generation.authorization.authenticated = false
+    generation.authorization.failed = false
+    parity.resume.attempted = true
+    mirrorAuthorization(generation)
+    bot.chat(`/hem resume ${resume}`)
+    return true
+  }
+
+  const timer = setInterval(() => {
+    const bot = globalThis.bot
+    if (bot?.entity) {
+      const generation = attachDiagnostics(bot)
+      sampleRenderer()
+      authorizeGeneration(bot, generation)
+    }
+    if (!token && !readResume() && bot?.entity) clearInterval(timer)
   }, 100)
 })()

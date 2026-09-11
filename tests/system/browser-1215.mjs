@@ -98,6 +98,61 @@ async function rendererReady(page, label) {
   }), `${label} rendered chunk sections`, 45_000)
 }
 
+async function sustainGeneration(page, label, durationMs = 55_000) {
+  const start = await page.evaluate(() => globalThis.__HEM_PARITY__?.connection?.activeGenerationId)
+  if (!Number.isInteger(start)) throw new Error(`${label}: missing active connection generation`)
+  const deadline = Date.now() + durationMs
+  while (Date.now() < deadline) {
+    const state = await page.evaluate(id => {
+      const p = globalThis.__HEM_PARITY__
+      const g = p?.connection?.generations?.find(entry => entry.id === id)
+      return {
+        active: p?.connection?.activeGenerationId,
+        connected: g?.connected === true,
+        endedAt: Number(g?.endedAt || 0),
+        keepAliveGuardAttached: g?.keepAliveGuardAttached === true,
+        seen: Number(g?.keepAliveSeen || 0),
+        responses: Number(g?.keepAliveResponses || 0),
+        endReason: String(g?.clientEndReason || ''),
+      }
+    }, start)
+    if (state.active !== start || !state.connected || state.endedAt || !state.keepAliveGuardAttached) {
+      throw new Error(`${label}: physical connection generation changed or ended during keepalive gate: ${JSON.stringify(state)}`)
+    }
+    await sleep(250)
+  }
+  const finalState = await page.evaluate(id => {
+    const g = globalThis.__HEM_PARITY__?.connection?.generations?.find(entry => entry.id === id)
+    return g ? { seen: Number(g.keepAliveSeen || 0), responses: Number(g.keepAliveResponses || 0), connected: g.connected === true, endedAt: Number(g.endedAt || 0), keepAliveGuardAttached: g.keepAliveGuardAttached === true } : null
+  }, start)
+  if (!finalState || !finalState.connected || finalState.endedAt || !finalState.keepAliveGuardAttached || finalState.seen < 3 || finalState.responses < finalState.seen) {
+    throw new Error(`${label}: insufficient same-generation Paper keepalive round trips: ${JSON.stringify(finalState)}`)
+  }
+  return start
+}
+
+async function activeGenerationId(page) {
+  return page.evaluate(() => globalThis.__HEM_PARITY__?.connection?.activeGenerationId)
+}
+
+async function waitForResumeGeneration(page, previousId, label, timeout = 30_000) {
+  return waitFor(() => page.evaluate(previous => {
+    const p = globalThis.__HEM_PARITY__
+    const id = p?.connection?.activeGenerationId
+    const generation = p?.connection?.generations?.find(entry => entry.id === id)
+    return Number.isInteger(id) && id !== previous && generation?.connected === true &&
+      generation.authorization?.mode === 'resume' && generation.authorization?.attempted === true &&
+      generation.authorization?.authenticated === true && p?.resume?.stored === true ? id : false
+  }, previousId), label, timeout, 250)
+}
+
+async function waitForGenerationEnd(page, generationId, label, timeout = 30_000) {
+  return waitFor(() => page.evaluate(id => {
+    const generation = globalThis.__HEM_PARITY__?.connection?.generations?.find(entry => entry.id === id)
+    return Boolean(generation && generation.connected === false && Number(generation.endedAt || 0) > 0)
+  }, generationId), label, timeout, 250)
+}
+
 async function waitPlayers(worldId, count, timeout = 30_000) {
   return waitFor(async () => {
     const state = await health()
@@ -228,16 +283,14 @@ try {
   // guarded fallback that only replies when the normal protocol client did not.
   // Prove an actual keepalive round trip for BOTH physical browser connections before
   // later gates can accidentally continue against a session Paper has already killed.
-  for (const [label, player] of [['Hudson', hudson], ['Elise', elise]]) {
+  const proveSustainedGeneration = async (label, player) => {
     try {
-      await waitFor(() => player.page.evaluate(() => {
-        const t = globalThis.__HEM_PARITY__?.transport
-        return Boolean(t?.keepAliveGuardAttached && t.keepAliveSeen >= 3 && t.keepAliveResponses >= t.keepAliveSeen)
-      }), `${label} sustains Paper keepalive round trips`, 55_000, 250)
+      return await sustainGeneration(player.page, label)
     } catch (error) {
       const diagnostic = await player.page.evaluate(() => ({
         connected: globalThis.__HEM_PARITY__?.connected === true,
         transport: globalThis.__HEM_PARITY__?.transport || {},
+        connection: globalThis.__HEM_PARITY__?.connection || {},
         packetsSeen: [...(globalThis.__HEM_PARITY__?.packetsSeen || [])].slice(-30),
       })).catch(() => ({ unavailable: true }))
       console.error(`${label} keepalive diagnostics:`, JSON.stringify(diagnostic))
@@ -246,7 +299,11 @@ try {
       throw error
     }
   }
-  pass('client.keepalive-transport', 'both browser clients prove sustained Paper 1.21.5 keepalive round trips without duplicate replies')
+  const [hudsonStableGeneration, eliseStableGeneration] = await Promise.all([
+    proveSustainedGeneration('Hudson', hudson),
+    proveSustainedGeneration('Elise', elise),
+  ])
+  pass('client.keepalive-transport', `same physical generations survive sustained Paper 1.21.5 keepalive round trips without duplicate replies (Hudson g${hudsonStableGeneration}, Elise g${eliseStableGeneration})`)
 
   const liveBuildIdentity = JSON.parse(await fs.readFile('apps/client/dist/hem-build.json', 'utf8'))
   const requiredCapabilities = ['keybindings','renderDistanceSetting','rawMouseInput','resourcePackTextures','creativeInventory','debugOverlay','thirdPerson','sounds']
@@ -323,14 +380,14 @@ try {
   // private plugin channel seeds a short-lived reconnect lease once. Refresh then
   // reuses that browser-local lease until its absolute expiry; a fresh launch revokes
   // it. This avoids making reconnect depend on post-reconnect custom-payload delivery.
+  const hudsonPreRefreshGeneration = await activeGenerationId(hudson.page)
+  if (hudsonPreRefreshGeneration !== hudsonStableGeneration) {
+    throw new Error(`Hudson changed physical generation after keepalive certification and before refresh: expected ${hudsonStableGeneration}, got ${hudsonPreRefreshGeneration}`)
+  }
   await hudson.page.reload({ waitUntil: 'domcontentloaded', timeout: 120_000 })
   await pageReady(hudson.page, H)
   try {
-    await waitFor(() => hudson.page.evaluate(() => Boolean(globalThis.__HEM_PARITY__?.resume?.attempted)), 'Hudson refresh attempts stored lease', 15_000)
-    await waitFor(() => hudson.page.evaluate(() => {
-      const p = globalThis.__HEM_PARITY__
-      return Boolean(p?.authorization?.authenticated && p?.resume?.stored)
-    }), 'Hudson refresh reuses short-lived reconnect lease', 30_000)
+    await waitForResumeGeneration(hudson.page, hudsonPreRefreshGeneration, 'Hudson refresh creates a new resume-authenticated physical generation', 30_000)
   } catch (error) {
     const diagnostic = await hudson.page.evaluate(() => {
       const p = globalThis.__HEM_PARITY__ || {}
@@ -348,15 +405,21 @@ try {
   }
   await waitPlayers(SHARED, 2, 30_000)
   await rendererReady(hudson.page, 'Hudson after refresh')
-  pass('session.refresh-resume', 'browser refresh/reconnect via retained short-lived reconnect lease')
+  pass('session.refresh-resume', 'browser refresh creates a new resume-authenticated physical generation via retained short-lived reconnect lease')
 
   // A page refresh is only one reconnect shape. Prove a transient proxy outage
   // actually drops both browser sessions, then recover the same tabs after the
   // proxy returns using only their retained short-lived reconnect leases.
   await waitFor(() => elise.page.evaluate(() => Boolean(globalThis.__HEM_PARITY__?.resume?.stored)), 'Elise receives resume lease before proxy outage', 20_000)
+  const preOutageGeneration = {
+    hudson: await activeGenerationId(hudson.page),
+    elise: await activeGenerationId(elise.page),
+  }
   compose('stop', '-t', '15', 'proxy')
-  await waitFor(() => hudson.page.evaluate(() => globalThis.__HEM_PARITY__?.connected === false), 'Hudson observes proxy outage', 30_000)
-  await waitFor(() => elise.page.evaluate(() => globalThis.__HEM_PARITY__?.connected === false), 'Elise observes proxy outage', 30_000)
+  await Promise.all([
+    waitForGenerationEnd(hudson.page, preOutageGeneration.hudson, 'Hudson physical generation ends during proxy outage'),
+    waitForGenerationEnd(elise.page, preOutageGeneration.elise, 'Elise physical generation ends during proxy outage'),
+  ])
   await waitPlayers(SHARED, 0, 30_000)
   compose('start', 'proxy')
   await waitFor(async () => {
@@ -373,12 +436,14 @@ try {
   ])
   await pageReady(hudson.page, H)
   await pageReady(elise.page, E)
-  await waitFor(() => hudson.page.evaluate(() => Boolean(globalThis.__HEM_PARITY__?.resume?.attempted && globalThis.__HEM_PARITY__?.resume?.stored)), 'Hudson resumes after proxy outage', 30_000)
-  await waitFor(() => elise.page.evaluate(() => Boolean(globalThis.__HEM_PARITY__?.resume?.attempted && globalThis.__HEM_PARITY__?.resume?.stored)), 'Elise resumes after proxy outage', 30_000)
+  const [hudsonPostOutageGeneration, elisePostOutageGeneration] = await Promise.all([
+    waitForResumeGeneration(hudson.page, preOutageGeneration.hudson, 'Hudson proxy restart creates fresh resume-authenticated generation'),
+    waitForResumeGeneration(elise.page, preOutageGeneration.elise, 'Elise proxy restart creates fresh resume-authenticated generation'),
+  ])
   await waitPlayers(SHARED, 2, 30_000)
   await rendererReady(hudson.page, 'Hudson after proxy recovery')
   await rendererReady(elise.page, 'Elise after proxy recovery')
-  pass('session.proxy-outage-resume', 'transient proxy outage + same-tab resume recovery')
+  pass('session.proxy-outage-resume', `proxy outage ends both physical generations; proxy restart creates fresh resume-authenticated generations (Hudson g${hudsonPostOutageGeneration}, Elise g${elisePostOutageGeneration})`)
 
   await waitFor(() => hudson.page.evaluate(other => Boolean(globalThis.bot?.players?.[other]?.entity), E), 'Hudson player list contains Elise', 20_000)
   await waitFor(() => elise.page.evaluate(other => Boolean(globalThis.bot?.players?.[other]?.entity), H), 'Elise player list contains Hudson', 20_000)
