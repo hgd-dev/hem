@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { createRequire } from 'node:module'
 
 const CONTROL = 'http://127.0.0.1:3000'
 const KEY = 'system-orchestrator-key-0123456789abcdef'
@@ -60,6 +61,51 @@ async function waitFor(fn, label, timeout = 120_000, interval = 500) {
   throw new Error(`Timed out: ${label}; last=${String(last)}`)
 }
 
+
+async function proveDirectProtocolKeepAlive(port, { minimumKeepAlives = 4, minimumMs = 75_000 } = {}) {
+  const upstreamRequire = createRequire(path.resolve('apps/client/upstream/package.json'))
+  const mineflayer = upstreamRequire('mineflayer')
+  const username = 'HEM_Ctrl_9a8b'
+  const token = 'hem-system-Control-token-000000000000000000006'
+  const bot = mineflayer.createBot({ host: '127.0.0.1', port, username, version: '1.21.5', auth: 'offline', hideErrors: true })
+  const client = bot._client
+  let seen = 0
+  let responses = 0
+  let ended = false
+  const errors = []
+  client.on('packet', (_data, meta) => { if (meta?.name === 'keep_alive') seen++ })
+  const originalWrite = client.write.bind(client)
+  client.write = function rc40ControlWrite(name, params) {
+    if (name === 'keep_alive') responses++
+    return originalWrite(name, params)
+  }
+  client.on('error', error => errors.push(String(error?.message || error).slice(0, 240)))
+  client.on('end', () => { ended = true })
+  try {
+    await waitFor(() => Boolean(bot.entity), 'direct protocol control joins Paper 1.21.5', 45_000, 100)
+    bot.chat(`/hem auth ${token}`)
+    await waitFor(async () => {
+      const state = await health()
+      return state.active?.find(entry => entry.id === SHARED)?.players === 1
+    }, 'direct protocol control authenticates through HEMGate', 20_000, 250)
+    const deadline = Date.now() + minimumMs
+    while (Date.now() < deadline) {
+      if (ended || !bot.entity) throw new Error(`direct protocol control ended early: ${JSON.stringify({ seen, responses, errors })}`)
+      await sleep(250)
+    }
+    if (seen < minimumKeepAlives || responses < seen) {
+      throw new Error(`direct protocol control did not sustain Paper keepalives: ${JSON.stringify({ seen, responses, errors })}`)
+    }
+    return { seen, responses, errors }
+  } finally {
+    try { client.end('rc40ControlComplete') } catch {}
+    await waitFor(async () => {
+      const state = await health()
+      return (state.active?.find(entry => entry.id === SHARED)?.players || 0) === 0
+    }, 'direct protocol control leaves Paper cleanly', 20_000, 250).catch(() => {})
+  }
+}
+
 function launchUrl(port, user, token) {
   const url = new URL('http://127.0.0.1:4173/')
   url.searchParams.set('ip', `orchestrator:${port}`)
@@ -105,6 +151,32 @@ async function gatewayDiagnostics(connectionId) {
   return body.connections?.find(entry => entry.id === connectionId) || null
 }
 
+
+async function logSustainFailure(page, label, generationId, lastKnownConnectionId) {
+  const pageState = await page.evaluate(id => {
+    const p = globalThis.__HEM_PARITY__
+    const g = p?.connection?.generations?.find(entry => entry.id === id)
+    return g ? {
+      activeGenerationId: p?.connection?.activeGenerationId,
+      connected: g.connected === true,
+      endedAt: Number(g.endedAt || 0),
+      seen: Number(g.keepAliveSeen || 0),
+      responses: Number(g.keepAliveResponses || 0),
+      eventLoopLag: g.eventLoopLag || {},
+      rawTransport: g.rawTransport || {},
+      clientEndReason: String(g.clientEndReason || ''),
+      clientErrors: Array.isArray(g.clientErrors) ? g.clientErrors.slice(-8) : [],
+    } : null
+  }, generationId).catch(error => ({ unavailable: true, reason: `client page unavailable: ${String(error?.message || error).slice(0, 240)}` }))
+  console.error(`${label} keepalive client diagnostics:`, JSON.stringify(pageState))
+  const gateway = lastKnownConnectionId
+    ? await gatewayDiagnostics(lastKnownConnectionId).catch(error => ({ unavailable: true, reason: String(error?.message || error) }))
+    : null
+  console.error(`${label} gateway diagnostics after page teardown:`, JSON.stringify(gateway))
+  const paperTail = await recentLogs(SHARED, 160).catch(() => [])
+  console.error(`${label} keepalive Paper tail\n` + paperTail.slice(-80).join('\n'))
+}
+
 async function sustainGeneration(page, label, { minimumKeepAlives = 3, minimumMs = 65_000 } = {}) {
   const startSnapshot = await waitFor(() => page.evaluate(() => {
     const p = globalThis.__HEM_PARITY__
@@ -116,54 +188,62 @@ async function sustainGeneration(page, label, { minimumKeepAlives = 3, minimumMs
       : false
   }), `${label} exposes HEM raw TCP generation diagnostics`, 15_000, 100)
   const start = startSnapshot.id
-  const connectionId = startSnapshot.connectionId
-  const gatewayBefore = await waitFor(() => gatewayDiagnostics(connectionId), `${label} gateway connection ${connectionId}`, 15_000, 100)
-  const deadline = Date.now() + minimumMs
-  while (Date.now() < deadline) {
-    const state = await page.evaluate(id => {
-      const p = globalThis.__HEM_PARITY__
-      const g = p?.connection?.generations?.find(entry => entry.id === id)
-      return {
-        active: p?.connection?.activeGenerationId,
-        connected: g?.connected === true,
-        endedAt: Number(g?.endedAt || 0),
-        keepAliveGuardAttached: g?.keepAliveGuardAttached === true,
-        seen: Number(g?.keepAliveSeen || 0),
-        responses: Number(g?.keepAliveResponses || 0),
-        endReason: String(g?.clientEndReason || ''),
-        rawTransport: g?.rawTransport || null,
+  let lastKnownConnectionId = startSnapshot.connectionId
+  const gatewayBefore = await waitFor(() => gatewayDiagnostics(lastKnownConnectionId), `${label} gateway connection ${lastKnownConnectionId}`, 15_000, 100)
+  try {
+    const deadline = Date.now() + minimumMs
+    while (Date.now() < deadline) {
+      const state = await page.evaluate(id => {
+        const p = globalThis.__HEM_PARITY__
+        const g = p?.connection?.generations?.find(entry => entry.id === id)
+        return {
+          active: p?.connection?.activeGenerationId,
+          connected: g?.connected === true,
+          endedAt: Number(g?.endedAt || 0),
+          keepAliveGuardAttached: g?.keepAliveGuardAttached === true,
+          seen: Number(g?.keepAliveSeen || 0),
+          responses: Number(g?.keepAliveResponses || 0),
+          endReason: String(g?.clientEndReason || ''),
+          eventLoopLag: g?.eventLoopLag || {},
+          rawTransport: g?.rawTransport || null,
+        }
+      }, start)
+      if (state.rawTransport?.connectionId) lastKnownConnectionId = state.rawTransport.connectionId
+      if (state.active !== start || !state.connected || state.endedAt || !state.keepAliveGuardAttached) {
+        throw new Error(`${label}: physical connection generation changed or ended during keepalive gate: ${JSON.stringify(state)}`)
       }
+      if (state.rawTransport?.implementation !== 'hem-raw-tcp-v1' || state.rawTransport?.connectionId !== lastKnownConnectionId) {
+        throw new Error(`${label}: physical generation changed raw transport identity during keepalive gate: ${JSON.stringify(state.rawTransport)}`)
+      }
+      await sleep(250)
+    }
+    const finalState = await page.evaluate(id => {
+      const g = globalThis.__HEM_PARITY__?.connection?.generations?.find(entry => entry.id === id)
+      return g ? {
+        seen: Number(g.keepAliveSeen || 0),
+        responses: Number(g.keepAliveResponses || 0),
+        connected: g.connected === true,
+        endedAt: Number(g.endedAt || 0),
+        keepAliveGuardAttached: g.keepAliveGuardAttached === true,
+        eventLoopLag: g.eventLoopLag || {},
+        rawTransport: g.rawTransport || null,
+      } : null
     }, start)
-    if (state.active !== start || !state.connected || state.endedAt || !state.keepAliveGuardAttached) {
-      throw new Error(`${label}: physical connection generation changed or ended during keepalive gate: ${JSON.stringify(state)}`)
+    if (!finalState || !finalState.connected || finalState.endedAt || !finalState.keepAliveGuardAttached || finalState.seen < minimumKeepAlives || finalState.responses < finalState.seen) {
+      throw new Error(`${label}: insufficient same-generation Paper keepalive round trips: ${JSON.stringify(finalState)}`)
     }
-    if (state.rawTransport?.implementation !== 'hem-raw-tcp-v1' || state.rawTransport?.connectionId !== connectionId) {
-      throw new Error(`${label}: physical generation changed raw transport identity during keepalive gate: ${JSON.stringify(state.rawTransport)}`)
+    if (finalState.rawTransport?.implementation !== 'hem-raw-tcp-v1' || finalState.rawTransport.connectionId !== lastKnownConnectionId || finalState.rawTransport.bytesSent <= 0 || finalState.rawTransport.bytesReceived <= 0) {
+      throw new Error(`${label}: incomplete browser raw transport evidence: ${JSON.stringify(finalState.rawTransport)}`)
     }
-    await sleep(250)
+    const gatewayAfter = await gatewayDiagnostics(lastKnownConnectionId)
+    if (!gatewayAfter || gatewayAfter.tcpBytesWritten <= gatewayBefore.tcpBytesWritten || gatewayAfter.wsBytesReceived <= gatewayBefore.wsBytesReceived) {
+      throw new Error(`${label}: gateway did not forward browser bytes to Paper during sustained keepalive gate: ${JSON.stringify({ before: gatewayBefore, after: gatewayAfter })}`)
+    }
+    return start
+  } catch (error) {
+    await logSustainFailure(page, label, start, lastKnownConnectionId)
+    throw error
   }
-  const finalState = await page.evaluate(id => {
-    const g = globalThis.__HEM_PARITY__?.connection?.generations?.find(entry => entry.id === id)
-    return g ? {
-      seen: Number(g.keepAliveSeen || 0),
-      responses: Number(g.keepAliveResponses || 0),
-      connected: g.connected === true,
-      endedAt: Number(g.endedAt || 0),
-      keepAliveGuardAttached: g.keepAliveGuardAttached === true,
-      rawTransport: g.rawTransport || null,
-    } : null
-  }, start)
-  if (!finalState || !finalState.connected || finalState.endedAt || !finalState.keepAliveGuardAttached || finalState.seen < minimumKeepAlives || finalState.responses < finalState.seen) {
-    throw new Error(`${label}: insufficient same-generation Paper keepalive round trips: ${JSON.stringify(finalState)}`)
-  }
-  if (finalState.rawTransport?.implementation !== 'hem-raw-tcp-v1' || finalState.rawTransport.connectionId !== connectionId || finalState.rawTransport.bytesSent <= 0 || finalState.rawTransport.bytesReceived <= 0) {
-    throw new Error(`${label}: incomplete browser raw transport evidence: ${JSON.stringify(finalState.rawTransport)}`)
-  }
-  const gatewayAfter = await gatewayDiagnostics(connectionId)
-  if (!gatewayAfter || gatewayAfter.tcpBytesWritten <= gatewayBefore.tcpBytesWritten || gatewayAfter.wsBytesReceived <= gatewayBefore.wsBytesReceived) {
-    throw new Error(`${label}: gateway did not forward browser bytes to Paper during sustained keepalive gate: ${JSON.stringify({ before: gatewayBefore, after: gatewayAfter })}`)
-  }
-  return start
 }
 
 async function activeGenerationId(page) {
@@ -301,6 +381,8 @@ try {
   // Shared-world real-time multiplayer acceptance.
   const sharedFirst = await ensureWorld(SHARED, { name: 'HEM Shared Acceptance' })
   console.log('Paper shared world ready', sharedFirst)
+  const directProtocol = await proveDirectProtocolKeepAlive(sharedFirst.port, { minimumKeepAlives: 4, minimumMs: 75_000 })
+  pass('direct-protocol-keepalive', `direct Node protocol control survived Paper keepalives (${directProtocol.seen} seen / ${directProtocol.responses} responses)`)
   let hudson = await openPlayer(browser, sharedFirst.port, H, 'hem-system-Hudson-token-0000000000000000000001', fatal, 'Hudson')
   let elise = await openPlayer(browser, sharedFirst.port, E, 'hem-system-Elise-token-00000000000000000000002', fatal, 'Elise')
   contexts.add(hudson.context); contexts.add(elise.context)

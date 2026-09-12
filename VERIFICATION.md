@@ -1,4 +1,4 @@
-# HEM RC39 verification record
+# HEM RC40 verification record
 
 Date: 2026-09-12
 
@@ -6,7 +6,7 @@ Date: 2026-09-12
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **161/161 passing** source/logic/security/release-gate tests in the current RC39 local pass.
+- `npm test`: **164/164 passing** source/logic/security/release-gate tests in the current RC40 local pass.
 - `npm run verify`: **58/58 release contracts passing**.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
@@ -249,3 +249,12 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - System Acceptance requires one unchanged physical generation to survive at least three Paper keepalive cycles for at least 65 seconds and requires both browser-side raw-byte counters and gateway TCP-write counters to advance on that same connection before declaring the transport gate.
 - The historical RC37 `net-browserify` ordering patch remains source provenance only and is no longer executed by the RC39 production build.
 - Live longevity remains unclaimed until the exact RC39 artifact passes the pinned two-browser Paper workflow and required soak.
+
+## RC40 keepalive root-cause discrimination
+
+- RC39's dedicated `hem-raw-tcp-v1` tunnel still reproduced Paper timeouts, so RC40 does not add another speculative transport rewrite.
+- System Acceptance now first runs a direct Node/Mineflayer client from the exact frozen upstream dependency graph against the same Paper 1.21.5 build 114 TCP listener for at least 75 seconds and four keepalive challenges. This bypasses Chromium and the HEM WebSocket gateway.
+- Browser physical-generation diagnostics now record 100 ms event-loop samples (`maxMs`, `samplesOver100ms`, `samplesOver1000ms`) so later keepalive misses can be correlated with Chromium scheduling stalls.
+- The keepalive failure path retains the last known `hem-raw-tcp-v1` connection ID and queries `/debug/connections` even after the browser document has navigated away, then prints the Paper tail.
+- The direct Paper port range is bound to `127.0.0.1` only in `tests/system/docker-compose.yml`; production Paper ports remain private and unpublished.
+- Live timeout resolution remains unclaimed until the exact RC40 Actions run tells us whether the direct protocol client survives while Chromium does not.

@@ -16,7 +16,7 @@
   // Expose a tiny read-only diagnostics surface for HEM's automated acceptance
   // runner. It deliberately contains no launch/resume secrets or profile credentials.
   const parity = {
-    hemVersion: '1.0.0-rc.39',
+    hemVersion: '1.0.0-rc.40',
     target: '1.21.5',
     connected: false,
     build: { checked: false, ok: false, compatibilityMode: '', upstreamRelease1215: null, protocolVerified1215: null, upstreamCommit: '' },
@@ -29,7 +29,7 @@
     resume: { available: false, attempted: false, stored: false, received: 0, leaseRequests: 0, channelRegistered: false, channelRegistrationFailed: false, recoveryUrlReady: Boolean(canonicalRecoveryUrl) },
     settingsRequested: {},
     packetsSeen: new Set(),
-    transport: { keepAliveSeen: 0, keepAliveResponses: 0, keepAliveFallbacks: 0, keepAliveGuardAttached: false, clientEndReason: '', clientErrors: [], rawTransport: { implementation: '', connectionId: '', framesSent: 0, framesReceived: 0, bytesSent: 0, bytesReceived: 0, maxBufferedAmount: 0, queuedWrites: 0, queuedBytes: 0, closeReason: '', errors: [] } },
+    transport: { keepAliveSeen: 0, keepAliveResponses: 0, keepAliveFallbacks: 0, keepAliveGuardAttached: false, clientEndReason: '', clientErrors: [], eventLoopLag: { lastMs: 0, maxMs: 0, samplesOver100ms: 0, samplesOver1000ms: 0 }, rawTransport: { implementation: '', connectionId: '', framesSent: 0, framesReceived: 0, bytesSent: 0, bytesReceived: 0, maxBufferedAmount: 0, queuedWrites: 0, queuedBytes: 0, closeReason: '', errors: [] } },
     presentation: { damageFlashes: 0, audioEvents: 0 },
     multiplayerEvents: { joined: 0, left: 0 },
     recentMessages: [],
@@ -46,6 +46,7 @@
     generation.connected = false
     if (!generation.endedAt) generation.endedAt = Date.now()
     if (generation.__rawTransportTimer) { clearInterval(generation.__rawTransportTimer); generation.__rawTransportTimer = null }
+    if (generation.__eventLoopLagTimer) { clearInterval(generation.__eventLoopLagTimer); generation.__eventLoopLagTimer = null }
     if (isActiveGeneration(generation)) parity.connected = false
   }
   const beginGeneration = client => {
@@ -65,6 +66,7 @@
       keepAliveGuardAttached: false,
       clientEndReason: '',
       clientErrors: [],
+      eventLoopLag: { lastMs: 0, maxMs: 0, samplesOver100ms: 0, samplesOver1000ms: 0 },
       authorization: { mode: '', attempted: false, authenticated: false, failed: false },
       resumeChannelRegistered: false,
       rawTransport: { implementation: '', connectionId: '', framesSent: 0, framesReceived: 0, bytesSent: 0, bytesReceived: 0, maxBufferedAmount: 0, queuedWrites: 0, queuedBytes: 0, closeReason: '', errors: [] },
@@ -88,6 +90,7 @@
     parity.transport.keepAliveGuardAttached = generation.keepAliveGuardAttached === true
     parity.transport.clientEndReason = generation.clientEndReason
     parity.transport.clientErrors = [...generation.clientErrors]
+    parity.transport.eventLoopLag = { ...generation.eventLoopLag }
     parity.transport.rawTransport = { ...generation.rawTransport, errors: [...(generation.rawTransport?.errors || [])] }
   }
 
@@ -380,6 +383,24 @@
     }
     syncRawTransport()
     Object.defineProperty(generation, '__rawTransportTimer', { value: setInterval(syncRawTransport, 250), writable: true, configurable: true, enumerable: false })
+
+    // Keepalive parsing and rendering share Chromium's main event loop. Record
+    // scheduling stalls per physical generation so a Paper timeout can be
+    // distinguished from a malformed or dropped network response.
+    const EVENT_LOOP_SAMPLE_MS = 100
+    const eventLoopNow = () => globalThis.performance?.now?.() ?? Date.now()
+    let eventLoopExpectedAt = eventLoopNow() + EVENT_LOOP_SAMPLE_MS
+    const sampleEventLoopLag = () => {
+      const now = eventLoopNow()
+      const lag = Math.max(0, now - eventLoopExpectedAt)
+      generation.eventLoopLag.lastMs = Math.round(lag)
+      generation.eventLoopLag.maxMs = Math.max(generation.eventLoopLag.maxMs, Math.round(lag))
+      if (lag >= 100) generation.eventLoopLag.samplesOver100ms++
+      if (lag >= 1000) generation.eventLoopLag.samplesOver1000ms++
+      eventLoopExpectedAt = now + EVENT_LOOP_SAMPLE_MS
+      mirrorTransport(generation)
+    }
+    Object.defineProperty(generation, '__eventLoopLagTimer', { value: setInterval(sampleEventLoopLag, EVENT_LOOP_SAMPLE_MS), writable: true, configurable: true, enumerable: false })
 
     const keepAliveState = globalThis.HEMKeepAliveGuard?.attachHemKeepAliveGuard?.(client)
     if (keepAliveState) {
