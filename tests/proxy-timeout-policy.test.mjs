@@ -4,7 +4,9 @@ import test from 'node:test'
 
 const source = fs.readFileSync(new URL('../apps/proxy/server.cjs', import.meta.url), 'utf8')
 
-test('HEM proxy keeps a short connect timeout but disables established TCP idle timeout', () => {
-  assert.match(source, /connectTimeout\s*:\s*5000/)
-  assert.match(source, /connectionTimeout\s*:\s*0/)
+test('HEM raw TCP gateway delegates connection establishment to net.connect and disables established idle timeout', () => {
+  assert.match(source, /tcpConnect\(target\)/)
+  assert.match(source, /tcp\.setTimeout\?\.\(0\)/)
+  assert.doesNotMatch(source, /connectionTimeout\s*:/)
+  assert.doesNotMatch(source, /connectTimeout\s*:/)
 })

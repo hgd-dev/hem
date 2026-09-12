@@ -12,7 +12,6 @@ Socket.prototype._connectWebSocket = function (token, cb) {
   this._ws = new WebSocket(getProxyOrigin() + getProxy().path + '/socket?token='+token)
   this._handleWebsocket()
 }
-
 Socket.prototype._handleWebsocket = function () {
   var self = this
   this._ws.addEventListener('message', function (e) {
@@ -22,69 +21,35 @@ Socket.prototype._handleWebsocket = function () {
       return
     } else if (window.Blob && contents instanceof Blob) {
       var fileReader = new FileReader()
-      fileReader.addEventListener('load', function (e) {
-        var buf = fileReader.result
-        var arr = new Uint8Array(buf)
+      fileReader.addEventListener('load', function () {
+        var arr = new Uint8Array(fileReader.result)
         processBuffer(new Buffer(arr))
       })
       fileReader.readAsArrayBuffer(contents)
-    } else {
-      console.warn('Cannot read TCP stream: unsupported message type', contents)
     }
   })
 }
 `
 
-test('browser TCP shim forces ordered ArrayBuffer WebSocket delivery instead of asynchronous Blob conversion', async () => {
-  assert.equal(fs.existsSync(patchPath), true, 'HEM must ship the net-browserify ordering patch')
+test('historical RC37 ordering patch remains reproducible for provenance only', async () => {
+  assert.equal(fs.existsSync(patchPath), true)
   const { PATCH_ID, patchBrowserSource } = await import(pathToFileURL(patchPath))
   assert.equal(PATCH_ID, 'hem-net-browserify-arraybuffer-ordering-v1')
   const patched = patchBrowserSource(legacy)
   assert.match(patched, /binaryType = 'arraybuffer'/)
   assert.match(patched, /contents instanceof ArrayBuffer/)
-  assert.match(patched, /new Uint8Array\(contents\)/)
-  const patchedAgain = patchBrowserSource(patched)
-  assert.equal(patchedAgain, patched, 'patch must be idempotent')
 })
 
-test('client build applies and attests the runtime-resolved net-browserify ordering patch before bundling', () => {
+test('RC39 build no longer executes the historical ordering patch', () => {
   const build = fs.readFileSync('apps/client/build-client.mjs', 'utf8')
-  assert.match(build, /patch-net-browserify-ordering\.mjs/)
-  assert.match(build, /\.hem-net-browserify-ordering\.json/)
-  assert.match(build, /hem-net-browserify-arraybuffer-ordering-v1/)
-  assert.match(build, /netBrowserifyOrderingPatch/)
+  assert.doesNotMatch(build, /run\('node', \[netBrowserifyPatchScript, upstream\]\)/)
+  assert.doesNotMatch(build, /\.hem-net-browserify-ordering\.json/)
+  assert.match(build, /install-hem-net-transport\.mjs/)
+  assert.match(build, /hem-raw-tcp-v1/)
 })
 
-test('release verification requires the runtime net-browserify ordering patch and its attestation', () => {
-  const verify = fs.readFileSync('scripts/verify.mjs', 'utf8')
-  assert.match(verify, /patch-net-browserify-ordering\.mjs/)
-  assert.match(verify, /net-browserify ordered binary transport patch/)
-  assert.match(verify, /orderedBinaryDelivery/)
-  assert.match(verify, /avoidsAsyncBlobPath/)
-})
-
-test('live acceptance requires the ordered transport attestation and multiple keepalive round trips', () => {
-  const system = fs.readFileSync('tests/system/browser-1215.mjs', 'utf8')
-  assert.match(system, /netBrowserifyOrderingPatch/)
-  assert.match(system, /hem-net-browserify-arraybuffer-ordering-v1/)
-  assert.match(system, /finalState\.seen < 3/)
-  assert.match(system, /sustained Paper 1\.21\.5 keepalive/)
-})
-
-test('system doctor and production deployment reject builds without ordered browser transport attestation', () => {
-  const doctor = fs.readFileSync('scripts/doctor.mjs', 'utf8')
-  const deploy = fs.readFileSync('.github/workflows/deploy-cloudflare.yml', 'utf8')
-  for (const source of [doctor, deploy]) {
-    assert.match(source, /netBrowserifyOrderingPatch/)
-    assert.match(source, /hem-net-browserify-arraybuffer-ordering-v1/)
-    assert.match(source, /orderedBinaryDelivery/)
-  }
-})
-
-test('browser diagnostics record protocol-client errors and end reason for transport failures', () => {
+test('browser diagnostics still record protocol-client error and end reason', () => {
   const bridge = fs.readFileSync('apps/client/hem-bridge.js', 'utf8')
   assert.match(bridge, /clientEndReason/)
   assert.match(bridge, /clientErrors/)
-  assert.match(bridge, /client\?\.on\?\.\('end'/)
-  assert.match(bridge, /client\?\.on\?\.\('error'/)
 })

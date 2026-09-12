@@ -38,7 +38,7 @@ Until HEMGate accepts the token, a joining player is frozen, invulnerable/non-co
 
 ### Proxy
 
-The proxy is not a generic TCP relay. Its destination allowlist is generated only for the orchestrator host and the configured world port range. Raw Paper ports are not published from production Docker Compose.
+The RC39 gateway is not a generic TCP relay. The browser may request only a world port; the gateway ignores arbitrary host input, always targets configured `MC_HOST`, validates the port against `WORLD_PORT_START..WORLD_PORT_END`, and checks the WebSocket Origin before opening TCP. Each accepted WebSocket maps to one TCP socket. Diagnostics contain connection IDs, counters and close reasons only—never launch/resume credentials or Minecraft payload bytes. Raw Paper ports are not published from production Docker Compose.
 
 ### Administrative control
 

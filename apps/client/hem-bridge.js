@@ -16,7 +16,7 @@
   // Expose a tiny read-only diagnostics surface for HEM's automated acceptance
   // runner. It deliberately contains no launch/resume secrets or profile credentials.
   const parity = {
-    hemVersion: '1.0.0-rc.38',
+    hemVersion: '1.0.0-rc.39',
     target: '1.21.5',
     connected: false,
     build: { checked: false, ok: false, compatibilityMode: '', upstreamRelease1215: null, protocolVerified1215: null, upstreamCommit: '' },
@@ -29,7 +29,7 @@
     resume: { available: false, attempted: false, stored: false, received: 0, leaseRequests: 0, channelRegistered: false, channelRegistrationFailed: false, recoveryUrlReady: Boolean(canonicalRecoveryUrl) },
     settingsRequested: {},
     packetsSeen: new Set(),
-    transport: { keepAliveSeen: 0, keepAliveResponses: 0, keepAliveFallbacks: 0, keepAliveGuardAttached: false, clientEndReason: '', clientErrors: [] },
+    transport: { keepAliveSeen: 0, keepAliveResponses: 0, keepAliveFallbacks: 0, keepAliveGuardAttached: false, clientEndReason: '', clientErrors: [], rawTransport: { implementation: '', connectionId: '', framesSent: 0, framesReceived: 0, bytesSent: 0, bytesReceived: 0, maxBufferedAmount: 0, queuedWrites: 0, queuedBytes: 0, closeReason: '', errors: [] } },
     presentation: { damageFlashes: 0, audioEvents: 0 },
     multiplayerEvents: { joined: 0, left: 0 },
     recentMessages: [],
@@ -45,6 +45,7 @@
     if (!generation) return
     generation.connected = false
     if (!generation.endedAt) generation.endedAt = Date.now()
+    if (generation.__rawTransportTimer) { clearInterval(generation.__rawTransportTimer); generation.__rawTransportTimer = null }
     if (isActiveGeneration(generation)) parity.connected = false
   }
   const beginGeneration = client => {
@@ -66,6 +67,7 @@
       clientErrors: [],
       authorization: { mode: '', attempted: false, authenticated: false, failed: false },
       resumeChannelRegistered: false,
+      rawTransport: { implementation: '', connectionId: '', framesSent: 0, framesReceived: 0, bytesSent: 0, bytesReceived: 0, maxBufferedAmount: 0, queuedWrites: 0, queuedBytes: 0, closeReason: '', errors: [] },
     }
     generationByClient.set(client, generation)
     try { sessionStorage.setItem(generationKey, String(generation.id)) } catch {}
@@ -86,6 +88,7 @@
     parity.transport.keepAliveGuardAttached = generation.keepAliveGuardAttached === true
     parity.transport.clientEndReason = generation.clientEndReason
     parity.transport.clientErrors = [...generation.clientErrors]
+    parity.transport.rawTransport = { ...generation.rawTransport, errors: [...(generation.rawTransport?.errors || [])] }
   }
 
   let fatalShown = false
@@ -119,7 +122,7 @@
     parity.build.upstreamRelease1215 = build.upstreamRelease1215 === true
     parity.build.protocolVerified1215 = build.protocolVerified1215 === true
     parity.build.upstreamCommit = /^[0-9a-f]{40}$/i.test(build.upstreamCommit || '') ? build.upstreamCommit : ''
-    parity.build.ok = build.minecraft === '1.21.5' && build.hemVersion === parity.hemVersion && build.compatibilityMode === 'pinned-v0.1.99-lockfile-1215-verified' && build.upstreamReleaseTag === 'v0.1.99' && build.upstreamRelease1215 === true && build.protocolVerified1215 === true && build.frozenLockfile === true && /^[0-9a-f]{64}$/i.test(build.upstreamLockSha256 || '')
+    parity.build.ok = build.minecraft === '1.21.5' && build.hemVersion === parity.hemVersion && build.compatibilityMode === 'pinned-v0.1.99-lockfile-1215-verified' && build.upstreamReleaseTag === 'v0.1.99' && build.upstreamRelease1215 === true && build.protocolVerified1215 === true && build.frozenLockfile === true && build.transport === 'hem-raw-tcp-v1' && build.netBrowserifyProductionTransport === false && build.orderedBinaryDelivery === true && build.singleWebSocketTcpTunnel === true && /^[0-9a-f]{64}$/i.test(build.upstreamLockSha256 || '')
     if (!parity.build.ok) showFatal('build-identity', 'The browser bundle identity does not match this HEM 1.21.5 release. Return to the HEM launcher and redeploy the matching client build.')
   }).catch(error => {
     parity.build.checked = true
@@ -357,6 +360,27 @@
       endGeneration(generation)
       mirrorTransport(generation)
     })
+    const syncRawTransport = () => {
+      const raw = client?.socket?.__hemTransportState
+      if (!raw || raw.implementation !== 'hem-raw-tcp-v1') return
+      generation.rawTransport = {
+        implementation: 'hem-raw-tcp-v1',
+        connectionId: String(raw.connectionId || ''),
+        framesSent: Number(raw.framesSent || 0),
+        framesReceived: Number(raw.framesReceived || 0),
+        bytesSent: Number(raw.bytesSent || 0),
+        bytesReceived: Number(raw.bytesReceived || 0),
+        maxBufferedAmount: Number(raw.maxBufferedAmount || 0),
+        queuedWrites: Number(raw.queuedWrites || 0),
+        queuedBytes: Number(raw.queuedBytes || 0),
+        closeReason: String(raw.closeReason || ''),
+        errors: Array.isArray(raw.errors) ? raw.errors.slice(-8).map(value => String(value).slice(0, 240)) : [],
+      }
+      mirrorTransport(generation)
+    }
+    syncRawTransport()
+    Object.defineProperty(generation, '__rawTransportTimer', { value: setInterval(syncRawTransport, 250), writable: true, configurable: true, enumerable: false })
+
     const keepAliveState = globalThis.HEMKeepAliveGuard?.attachHemKeepAliveGuard?.(client)
     if (keepAliveState) {
       generation.keepAliveGuardAttached = true

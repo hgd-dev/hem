@@ -121,17 +121,17 @@ const pnpm = args => run('npx', ['--yes', `pnpm@${pnpmVersion}`, ...args], upstr
 process.env.CYPRESS_INSTALL_BINARY ??= '0'
 pnpm(['install', '--frozen-lockfile'])
 
-// net-browserify 0.2.4 defaults browser WebSocket binary frames to Blob and converts
-// each frame through an independent asynchronous FileReader. Minecraft protocol bytes
-// are a strict ordered TCP stream; overlapping Blob conversions can therefore reorder
-// chunks before the protocol parser sees them. Force ArrayBuffer delivery so WebSocket
-// message-event order is preserved synchronously all the way into the TCP shim.
-const netBrowserifyPatchScript = path.join(here, 'patch-net-browserify-ordering.mjs')
-run('node', [netBrowserifyPatchScript, upstream])
-const netBrowserifyPatchReportPath = path.join(upstream, '.hem-net-browserify-ordering.json')
-const netBrowserifyOrderingPatch = JSON.parse(await fsp.readFile(netBrowserifyPatchReportPath, 'utf8'))
-if (netBrowserifyOrderingPatch.patchId !== 'hem-net-browserify-arraybuffer-ordering-v1') throw new Error('HEM net-browserify ordering patch identity mismatch')
-if (netBrowserifyOrderingPatch.runtimeResolved !== true || netBrowserifyOrderingPatch.binaryType !== 'arraybuffer' || netBrowserifyOrderingPatch.orderedBinaryDelivery !== true || netBrowserifyOrderingPatch.avoidsAsyncBlobPath !== true) throw new Error('HEM net-browserify ordering patch attestation mismatch')
+// RC38 proved the historical generic browser TCP shim could report successful
+// keepalive writes while Paper still timed out the same physical connection. RC39
+// replaces the runtime-resolved browser `net` implementation end-to-end with HEM's
+// dedicated one-WebSocket raw TCP adapter. The frozen upstream lockfile remains
+// authoritative; only the installed browser entrypoint is replaced after install.
+const hemNetTransportScript = path.join(here, 'install-hem-net-transport.mjs')
+run('node', [hemNetTransportScript, upstream])
+const hemNetTransportReportPath = path.join(upstream, '.hem-net-transport.json')
+const hemNetTransport = JSON.parse(await fsp.readFile(hemNetTransportReportPath, 'utf8'))
+if (hemNetTransport.transportId !== 'hem-raw-tcp-v1') throw new Error('HEM raw TCP transport identity mismatch')
+if (hemNetTransport.runtimeResolved !== true || hemNetTransport.netBrowserifyProductionTransport !== false || hemNetTransport.orderedBinaryDelivery !== true || hemNetTransport.singleWebSocketTcpTunnel !== true) throw new Error('HEM raw TCP transport attestation mismatch')
 
 // node-minecraft-protocol's historical registerarr serializer writes every
 // channel as a C string, leaving a trailing NUL after the final identifier.
@@ -317,7 +317,7 @@ delete config.defaultProxy
 await fsp.writeFile(configPath, JSON.stringify(config, null, 2) + '\n')
 
 await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
-  hemVersion: '1.0.0-rc.38',
+  hemVersion: '1.0.0-rc.39',
   minecraft: '1.21.5',
   upstreamRepo: repo,
   upstreamRef: ref,
@@ -333,7 +333,11 @@ await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
   frozenLockfile: true,
   serviceWorkerDisabled: true,
   keepAliveGuard: 'hem-keepalive-guard-v1',
-  netBrowserifyOrderingPatch,
+  transport: 'hem-raw-tcp-v1',
+  netBrowserifyProductionTransport: false,
+  orderedBinaryDelivery: true,
+  singleWebSocketTcpTunnel: true,
+  hemNetTransport,
   soundMap: { source: generatedSoundMapSource, sha256: generatedSoundMapSha256, bytes: generatedSoundMapBytes.length, path: '/sounds.js' },
   prismarineChunkPatch,
   minecraftProtocolRegisterPatch,

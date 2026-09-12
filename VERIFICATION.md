@@ -1,12 +1,12 @@
-# HEM RC38 verification record
+# HEM RC39 verification record
 
-Date: 2026-09-11
+Date: 2026-09-12
 
 ## Completed in the build sandbox
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **141/141 passing** source/logic/security/release-gate tests in the current RC38 local pass.
+- `npm test`: **161/161 passing** source/logic/security/release-gate tests in the current RC39 local pass.
 - `npm run verify`: **58/58 release contracts passing**.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
@@ -237,3 +237,15 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - System Acceptance now holds Hudson and Elise on one unchanged physical generation for the complete keepalive observation window, fails if the generation changes or ends, and requires at least three keepalive responses on that same generation.
 - Refresh and transient proxy-outage gates now require fresh generation IDs plus generation-local `resume` authorization success before renderer/gameplay acceptance continues.
 - Live longevity remains unclaimed until the exact RC38 artifact passes the pinned two-browser Paper workflow and required soak. If an unchanged generation still answers keepalives correctly yet Paper later times out, RC39 escalates to a purpose-built HEM WebSocket-to-TCP gateway instead of adding another lifecycle heuristic.
+
+
+## RC39 dedicated browser-to-Paper transport replacement
+
+- RC38's live workflow proved the remaining failure was below page/auth lifecycle: Hudson stayed on one physical generation, observed Paper keepalives and wrote matching responses, yet Paper still disconnected Hudson and Elise for timeout.
+- RC39 removes the generic `net-browserify` transport from the active production path and installs `hem-raw-tcp-v1` into the runtime-resolved frozen browser dependency after install.
+- The browser adapter maps each Minecraft TCP connection to exactly one binary WebSocket, preserves write ordering, applies bounded browser buffering/backpressure, handles ArrayBuffer frames synchronously, and records secret-free frame/byte/close diagnostics per physical generation.
+- The HEM gateway validates Origin and the configured world-port range, always targets `MC_HOST` rather than a browser-supplied hostname, maps one WebSocket to one TCP socket, disables generic established-idle timeout, and honors TCP drain backpressure in both the implementation and regression suite.
+- Build, doctor, deploy, and system certification now fail closed unless `hem-build.json` attests `transport: hem-raw-tcp-v1`, `netBrowserifyProductionTransport: false`, ordered delivery and a runtime-resolved HEM adapter installation.
+- System Acceptance requires one unchanged physical generation to survive at least three Paper keepalive cycles for at least 65 seconds and requires both browser-side raw-byte counters and gateway TCP-write counters to advance on that same connection before declaring the transport gate.
+- The historical RC37 `net-browserify` ordering patch remains source provenance only and is no longer executed by the RC39 production build.
+- Live longevity remains unclaimed until the exact RC39 artifact passes the pinned two-browser Paper workflow and required soak.

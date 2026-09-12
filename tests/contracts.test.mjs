@@ -46,7 +46,14 @@ test('launch token is never placed in query string',()=>{
 })
 
 test('proxy is destination allowlisted to orchestrator ports',()=>{
-  const p=read('apps/proxy/server.cjs'); assert.match(p,/to:destinations/); assert.match(p,/host:HOST,port:START\+i/); assert.doesNotMatch(p,/timeout:\s*30_000/)
+  const p=read('apps/proxy/server.cjs')
+  assert.match(p,/function validatePort \(value, start, end\)/)
+  assert.match(p,/function resolveTarget \(\{ requestedPort, host, start, end \}\)/)
+  assert.match(p,/host = process\.env\.MC_HOST \|\| 'orchestrator'/)
+  assert.match(p,/WORLD_PORT_START \|\| 31000/)
+  assert.match(p,/WORLD_PORT_END \|\| 31099/)
+  assert.match(p,/tcpConnect\(target\)/)
+  assert.doesNotMatch(p,/req\.query\.host/)
 })
 
 test('hub UI exposes separate Singleplayer and Multiplayer lists',()=>{
@@ -831,16 +838,16 @@ test('RC16 orchestrator image sources Java 21 from a real JRE image instead of B
 })
 
 
-test('RC17 proxy dependency stage provides git without shipping it in the runtime image',()=>{
+test('RC39 proxy installs only registry dependencies and ships no git toolchain',()=>{
   const d=read('apps/proxy/Dockerfile')
+  const pkg=JSON.parse(read('apps/proxy/package.json'))
   assert.ok(d.includes('FROM node:22-bookworm-slim AS deps'))
-  assert.ok(d.includes('apt-get install -y --no-install-recommends git ca-certificates'))
   assert.ok(d.includes('RUN npm install --omit=dev'))
   assert.ok(d.includes('COPY --from=deps /app/node_modules ./node_modules'))
-  const runtimeMarker='FROM node:22-bookworm-slim\nWORKDIR /app\nCOPY --from=deps /app/node_modules ./node_modules'
-  assert.ok(d.includes(runtimeMarker),'proxy runtime must copy preinstalled production dependencies from deps stage')
-  const runtime=d.slice(d.indexOf(runtimeMarker))
-  assert.doesNotMatch(runtime,/apt-get install[^\n]*git/)
+  assert.doesNotMatch(d,/apt-get install[^\n]*git/)
+  assert.doesNotMatch(JSON.stringify(pkg.dependencies || {}),/net-browserify|github:/)
+  assert.equal(pkg.dependencies?.express, '^4.21.2')
+  assert.equal(pkg.dependencies?.ws, '^8.18.3')
 })
 
 

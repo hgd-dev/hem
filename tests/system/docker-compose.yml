@@ -58,6 +58,7 @@ services:
       WORLD_PORT_START: "31000"
       WORLD_PORT_END: "31009"
       CLIENT_ORIGIN: http://127.0.0.1:4173
+      HEM_ENABLE_TEST_DIAGNOSTICS: "true"
     ports:
       - "127.0.0.1:8080:8080"
     depends_on: [orchestrator]

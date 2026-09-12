@@ -14,6 +14,10 @@ HEM is an integration project. This source package does not vendor the upstream 
 
 The browser client depends on Mineflayer, minecraft-protocol, minecraft-data and related Prismarine libraries through its upstream dependency graph. HEM preserves the exact dependency graph checked into the pinned v0.1.99 release and installs it with `--frozen-lockfile`; the resolved package versions and package/lock SHA-256 hashes are recorded in `hem-build.json`. HEM then rejects the build unless the installed graph resolves Minecraft 1.21.5 / protocol 770 and the required 1.21.5 registries/assets.
 
+## net-browserify provenance
+
+The pinned upstream v0.1.99 dependency graph still resolves `zardoy/prismarinejs-net-browserify` for reproducibility, but RC39 does not use its generic browser/server transport in production. After the frozen install, HEM replaces the runtime-resolved browser entrypoint with the HEM-owned `hem-raw-tcp-v1` adapter, and the HEM proxy service is a separate dedicated WebSocket-to-TCP gateway. Build attestation records this replacement and fails closed if the historical transport remains active.
+
 ## Paper
 
 HEM downloads a stable Paper 1.21.5 server build from PaperMC at runtime. Paper is not included in this source archive. Review Paper's own license and documentation before redistribution.

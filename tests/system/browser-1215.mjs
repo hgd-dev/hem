@@ -98,10 +98,27 @@ async function rendererReady(page, label) {
   }), `${label} rendered chunk sections`, 45_000)
 }
 
-async function sustainGeneration(page, label, durationMs = 55_000) {
-  const start = await page.evaluate(() => globalThis.__HEM_PARITY__?.connection?.activeGenerationId)
-  if (!Number.isInteger(start)) throw new Error(`${label}: missing active connection generation`)
-  const deadline = Date.now() + durationMs
+async function gatewayDiagnostics(connectionId) {
+  const response = await fetch('http://127.0.0.1:8080/debug/connections')
+  if (!response.ok) throw new Error(`gateway diagnostics HTTP ${response.status}`)
+  const body = await response.json()
+  return body.connections?.find(entry => entry.id === connectionId) || null
+}
+
+async function sustainGeneration(page, label, { minimumKeepAlives = 3, minimumMs = 65_000 } = {}) {
+  const startSnapshot = await waitFor(() => page.evaluate(() => {
+    const p = globalThis.__HEM_PARITY__
+    const id = p?.connection?.activeGenerationId
+    const g = p?.connection?.generations?.find(entry => entry.id === id)
+    const raw = g?.rawTransport
+    return Number.isInteger(id) && raw?.implementation === 'hem-raw-tcp-v1' && raw.connectionId
+      ? { id, connectionId: raw.connectionId, raw }
+      : false
+  }), `${label} exposes HEM raw TCP generation diagnostics`, 15_000, 100)
+  const start = startSnapshot.id
+  const connectionId = startSnapshot.connectionId
+  const gatewayBefore = await waitFor(() => gatewayDiagnostics(connectionId), `${label} gateway connection ${connectionId}`, 15_000, 100)
+  const deadline = Date.now() + minimumMs
   while (Date.now() < deadline) {
     const state = await page.evaluate(id => {
       const p = globalThis.__HEM_PARITY__
@@ -114,19 +131,37 @@ async function sustainGeneration(page, label, durationMs = 55_000) {
         seen: Number(g?.keepAliveSeen || 0),
         responses: Number(g?.keepAliveResponses || 0),
         endReason: String(g?.clientEndReason || ''),
+        rawTransport: g?.rawTransport || null,
       }
     }, start)
     if (state.active !== start || !state.connected || state.endedAt || !state.keepAliveGuardAttached) {
       throw new Error(`${label}: physical connection generation changed or ended during keepalive gate: ${JSON.stringify(state)}`)
     }
+    if (state.rawTransport?.implementation !== 'hem-raw-tcp-v1' || state.rawTransport?.connectionId !== connectionId) {
+      throw new Error(`${label}: physical generation changed raw transport identity during keepalive gate: ${JSON.stringify(state.rawTransport)}`)
+    }
     await sleep(250)
   }
   const finalState = await page.evaluate(id => {
     const g = globalThis.__HEM_PARITY__?.connection?.generations?.find(entry => entry.id === id)
-    return g ? { seen: Number(g.keepAliveSeen || 0), responses: Number(g.keepAliveResponses || 0), connected: g.connected === true, endedAt: Number(g.endedAt || 0), keepAliveGuardAttached: g.keepAliveGuardAttached === true } : null
+    return g ? {
+      seen: Number(g.keepAliveSeen || 0),
+      responses: Number(g.keepAliveResponses || 0),
+      connected: g.connected === true,
+      endedAt: Number(g.endedAt || 0),
+      keepAliveGuardAttached: g.keepAliveGuardAttached === true,
+      rawTransport: g.rawTransport || null,
+    } : null
   }, start)
-  if (!finalState || !finalState.connected || finalState.endedAt || !finalState.keepAliveGuardAttached || finalState.seen < 3 || finalState.responses < finalState.seen) {
+  if (!finalState || !finalState.connected || finalState.endedAt || !finalState.keepAliveGuardAttached || finalState.seen < minimumKeepAlives || finalState.responses < finalState.seen) {
     throw new Error(`${label}: insufficient same-generation Paper keepalive round trips: ${JSON.stringify(finalState)}`)
+  }
+  if (finalState.rawTransport?.implementation !== 'hem-raw-tcp-v1' || finalState.rawTransport.connectionId !== connectionId || finalState.rawTransport.bytesSent <= 0 || finalState.rawTransport.bytesReceived <= 0) {
+    throw new Error(`${label}: incomplete browser raw transport evidence: ${JSON.stringify(finalState.rawTransport)}`)
+  }
+  const gatewayAfter = await gatewayDiagnostics(connectionId)
+  if (!gatewayAfter || gatewayAfter.tcpBytesWritten <= gatewayBefore.tcpBytesWritten || gatewayAfter.wsBytesReceived <= gatewayBefore.wsBytesReceived) {
+    throw new Error(`${label}: gateway did not forward browser bytes to Paper during sustained keepalive gate: ${JSON.stringify({ before: gatewayBefore, after: gatewayAfter })}`)
   }
   return start
 }
@@ -283,9 +318,9 @@ try {
   // guarded fallback that only replies when the normal protocol client did not.
   // Prove an actual keepalive round trip for BOTH physical browser connections before
   // later gates can accidentally continue against a session Paper has already killed.
-  const proveSustainedGeneration = async (label, player) => {
+  const proveSustainedGeneration = async (label, player, options) => {
     try {
-      return await sustainGeneration(player.page, label)
+      return await sustainGeneration(player.page, label, options)
     } catch (error) {
       const diagnostic = await player.page.evaluate(() => ({
         connected: globalThis.__HEM_PARITY__?.connected === true,
@@ -299,11 +334,16 @@ try {
       throw error
     }
   }
+  const transportPaperBaseline = await recentLogs(SHARED, 300)
   const [hudsonStableGeneration, eliseStableGeneration] = await Promise.all([
-    proveSustainedGeneration('Hudson', hudson),
-    proveSustainedGeneration('Elise', elise),
+    proveSustainedGeneration('Hudson', hudson, { minimumKeepAlives: 3, minimumMs: 65_000 }),
+    proveSustainedGeneration('Elise', elise, { minimumKeepAlives: 3, minimumMs: 65_000 }),
   ])
-  pass('client.keepalive-transport', `same physical generations survive sustained Paper 1.21.5 keepalive round trips without duplicate replies (Hudson g${hudsonStableGeneration}, Elise g${eliseStableGeneration})`)
+  const transportPaperAfter = await recentLogs(SHARED, 300)
+  const transportPaperDelta = transportPaperAfter.slice(Math.min(transportPaperBaseline.length, transportPaperAfter.length))
+  const timeoutLines = transportPaperDelta.filter(line => /(?:HEM_Huds_1a2b3|HEM_Elis_4d5e6) lost connection: Timed out/i.test(line))
+  if (timeoutLines.length) throw new Error(`Paper timed out a certified HEM raw TCP generation: ${timeoutLines.join(' | ')}`)
+  pass('client.keepalive-transport', `same physical generations survive sustained Paper 1.21.5 keepalive round trips over hem-raw-tcp-v1 with browser->gateway->TCP byte evidence (Hudson g${hudsonStableGeneration}, Elise g${eliseStableGeneration})`)
 
   const liveBuildIdentity = JSON.parse(await fs.readFile('apps/client/dist/hem-build.json', 'utf8'))
   const requiredCapabilities = ['keybindings','renderDistanceSetting','rawMouseInput','resourcePackTextures','creativeInventory','debugOverlay','thirdPerson','sounds']
@@ -316,7 +356,7 @@ try {
   if (liveBuildIdentity.frozenLockfile !== true) throw new Error('Built browser client did not use the pinned v0.1.99 frozen lockfile')
   if (liveBuildIdentity.serviceWorkerDisabled !== true) throw new Error('HEM browser build must disable the upstream service worker for deterministic refresh/reconnect')
   if (liveBuildIdentity.keepAliveGuard !== 'hem-keepalive-guard-v1') throw new Error('HEM browser build is missing the guarded Paper keepalive fallback')
-  if (liveBuildIdentity.netBrowserifyOrderingPatch?.patchId !== 'hem-net-browserify-arraybuffer-ordering-v1' || liveBuildIdentity.netBrowserifyOrderingPatch?.runtimeResolved !== true || liveBuildIdentity.netBrowserifyOrderingPatch?.binaryType !== 'arraybuffer' || liveBuildIdentity.netBrowserifyOrderingPatch?.orderedBinaryDelivery !== true || liveBuildIdentity.netBrowserifyOrderingPatch?.avoidsAsyncBlobPath !== true) throw new Error('HEM browser build is missing the ordered net-browserify ArrayBuffer transport patch')
+  if (liveBuildIdentity.transport !== 'hem-raw-tcp-v1' || liveBuildIdentity.netBrowserifyProductionTransport !== false || liveBuildIdentity.orderedBinaryDelivery !== true || liveBuildIdentity.singleWebSocketTcpTunnel !== true || liveBuildIdentity.hemNetTransport?.runtimeResolved !== true) throw new Error('HEM browser build is missing the dedicated raw TCP transport attestation')
   if (liveBuildIdentity.compatibilityMode !== 'pinned-v0.1.99-lockfile-1215-verified' || liveBuildIdentity.protocolVerified1215 !== true) throw new Error(`HEM 1.21.5 requires pinned v0.1.99 frozen dependencies plus verified protocol/data; got ${liveBuildIdentity.compatibilityMode}`)
   const soundMapBytes = await fs.readFile('apps/client/dist/sounds.js')
   const soundMapSha256 = createHash('sha256').update(soundMapBytes).digest('hex')
@@ -2859,7 +2899,11 @@ try {
     pnpmVersion: buildIdentity.pnpmVersion,
     frozenLockfile: buildIdentity.frozenLockfile === true,
     prismarineChunkPatch: buildIdentity.prismarineChunkPatch,
-    netBrowserifyOrderingPatch: buildIdentity.netBrowserifyOrderingPatch,
+    transport: buildIdentity.transport,
+    netBrowserifyProductionTransport: buildIdentity.netBrowserifyProductionTransport,
+    orderedBinaryDelivery: buildIdentity.orderedBinaryDelivery,
+    singleWebSocketTcpTunnel: buildIdentity.singleWebSocketTcpTunnel,
+    hemNetTransport: buildIdentity.hemNetTransport,
     soundMap: buildIdentity.soundMap,
     compatibilityMode: buildIdentity.compatibilityMode,
     soakMinutes: SOAK_MINUTES,

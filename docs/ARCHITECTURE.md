@@ -16,7 +16,7 @@ Public HEM Hub (Cloudflare Worker + D1)
 Browser HEM client                        ▼
 (minecraft-web-client / Mineflayer)   Orchestrator (VPS)
            │                           ├─ Paper world A process
-           │ WSS → TCP proxy          ├─ Paper world B process
+           │ HEM raw WSS → TCP tunnel  ├─ Paper world B process
            └──────────────────────────►└─ ... on-demand, bounded
                                             │
                                             ├─ world/
@@ -45,7 +45,7 @@ For two people, bounded on-demand processes are operationally simpler than inven
 4. If stopped, orchestrator selects an internal port and starts Paper.
 5. HEMGate loads before player use of the world.
 6. Hub issues a 90-second one-use token bound to the exact HEM world and exact private Minecraft login name.
-7. Browser connects through the allowlisted WebSocket proxy.
+7. Browser connects through the allowlisted `hem-raw-tcp-v1` WebSocket-to-TCP gateway. Each Minecraft TCP connection maps to one binary WebSocket and one orchestrator TCP socket.
 8. HEM browser bridge sends `/hem auth <token>`.
 9. HEMGate consumes the token from the Hub. Until success the player is frozen and cannot interact, move, damage, manipulate inventory, drop/pick up or execute other commands.
 10. Paper plays normally after authorization.
@@ -71,13 +71,13 @@ The browser client is built reproducibly from the exact `zardoy/minecraft-web-cl
 - HEM one-use authorization bridge;
 - a deterministic post-install `prismarine-chunk` patch for Minecraft 1.21.5 paletted block/biome arrays, which omit the legacy VarInt data-length prefix and therefore require fixed non-spanning packed-long counts.
 
-The chunk patch runs only after the exact frozen v0.1.99 install, fails closed if the historical source shape is not recognized, and records its package version, before/after source hashes and sizing sentinels in the build identity. The build records the exact upstream Git commit, package/lock SHA-256 hashes, pnpm version, resolved dependency versions and chunk-patch attestation in `hem-build.json`.
+The chunk patch runs only after the exact frozen v0.1.99 install, fails closed if the historical source shape is not recognized, and records its package version, before/after source hashes and sizing sentinels in the build identity. RC39 additionally replaces the runtime-resolved historical `net-browserify` browser entrypoint with HEM's `hem-raw-tcp-v1` adapter after frozen install. The active client transport therefore uses one ordered binary WebSocket per Minecraft TCP connection rather than the historical HTTP connect-token + generic WebSocket pairing. `hem-build.json` attests the exact upstream Git commit, package/lock SHA-256 hashes, resolved dependencies, compatibility patches, and that `net-browserify` is not the active production transport.
 
 This patch deliberately does **not** claim that the upstream renderer already has perfect 1.21.5 visual coverage. The real two-browser workflow is the compatibility gate.
 
 ## Network boundaries
 
-Raw Paper ports are exposed only inside the Docker network. The public proxy can dial only `orchestrator` and only the configured Paper port range. The public control endpoint requires a strong service key. HEMGate prevents an unauthenticated proxy user from using a Paper world.
+Raw Paper ports are exposed only inside the Docker network. The public HEM raw TCP gateway ignores browser-supplied hosts, always dials the configured `MC_HOST`, and accepts only the configured Paper world-port range. It preserves ordered binary frames, honors TCP drain backpressure, and has no generic established-session idle timeout. The public control endpoint requires a strong service key. HEMGate prevents an unauthenticated transport client from using a Paper world.
 
 ## Capacity
 

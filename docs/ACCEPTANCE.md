@@ -13,7 +13,7 @@ It builds the real browser client and launches an isolated test stack containing
 - Paper 1.21.5 build 114 (checksum-pinned);
 - HEMGate;
 - HEM orchestrator;
-- HEM WebSocket→TCP proxy;
+- HEM `hem-raw-tcp-v1` WebSocket→TCP gateway;
 - test-only launch-token service plus a dedicated HTTPS custom-skin origin;
 - two independent headless Chromium browser contexts.
 
@@ -22,12 +22,12 @@ The workflow verifies:
 1. The HEM launcher opens from a real Chromium page with a functioning WebGL 3D skin preview.
 2. Classic and Slim arm geometry both render; drag rotation works; a legacy 64×32 upload is normalized to a complete Classic 64×64 atlas.
 3. Paper 1.21.5 reaches ready state for a real shared HEM world.
-4. Hudson and Elise each connect from independent Chromium contexts through the real WebSocket→TCP proxy.
+4. Hudson and Elise each connect from independent Chromium contexts through the real `hem-raw-tcp-v1` WebSocket→TCP gateway. One unchanged physical generation per browser must survive at least three Paper keepalive cycles for at least 65 seconds, while browser raw-byte counters and gateway TCP-write counters both advance.
 5. HEMGate authenticates both one-use launch sessions and Paper reports two players.
 6. Both clients load protocol 770 / 1.21.5 registries and live rendered chunk-section meshes; `hem-build.json` must attest the deterministic `hem-prismarine-chunk-1215-nosize-v5` block/biome no-size-prefix decoder patch and the generated `/sounds.js` byte-count/SHA-256 before the renderer/capability gate can pass.
 7. Each browser fetches the other player’s distinct custom HEM skin over the system HTTPS skin origin after post-auth profile re-announcement.
 8. A normal browser refresh reauthorizes through the retained five-minute browser-local `hem:session` reconnect lease without reusing the original one-use launch token or putting secrets in the URL; a fresh launch revokes the prior reconnect lease.
-9. The Docker proxy is actually stopped; both clients disconnect and Paper presence reaches zero. After restart, the same tabs recover through their still-valid browser-local reconnect leases.
+9. The Docker raw TCP gateway is actually stopped; both clients disconnect and Paper presence reaches zero. After restart, the same tabs recover through their still-valid browser-local reconnect leases and create fresh authenticated physical generations.
 10. Elise sees Hudson as a remote entity, receives horizontal movement, and sees a browser-origin jump.
 11. A real Chromium `W` key event (not a direct Mineflayer control call) moves Hudson server-authoritatively and Elise sees that movement.
 12. A controlled vertical fall is server-authoritative and produces fall damage.
