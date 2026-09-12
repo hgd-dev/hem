@@ -5,6 +5,12 @@ const net = require('net')
 
 const MAX_CLIENT_QUEUE_BYTES = 8 * 1024 * 1024
 const MAX_WS_BUFFERED_BYTES = 8 * 1024 * 1024
+const MAX_INSPECT_FRAME_BYTES = 16 * 1024 * 1024
+const KEEPALIVE_DEDUPE_MS = 60_000
+// Minecraft Java 1.21.5 play IDs from the pinned minecraft-data protocol: server->client 0x26, client->server 0x1a.
+// HEM pins Paper network-compression-threshold=256, so the 10-byte keepalive packet is carried with dataLength=0.
+const PLAY_CLIENTBOUND_KEEP_ALIVE_ID = 0x26
+const PLAY_SERVERBOUND_KEEP_ALIVE_ID = 0x1a
 
 function validatePort (value, start, end) {
   const port = Number(value)
@@ -49,6 +55,10 @@ function createDiagnosticState ({ id, port }) {
     maxWsBufferedAmount: 0,
     queuedClientFrames: 0,
     queuedClientBytes: 0,
+    keepAliveFastPathSeen: 0,
+    keepAliveFastPathResponses: 0,
+    keepAliveDuplicateDrops: 0,
+    keepAliveFastPathLastAt: 0,
     errors: [],
   }
 }
@@ -59,6 +69,43 @@ function recordError (state, error) {
   if (state.errors.length > 8) state.errors.shift()
 }
 
+function readVarIntPrefix (buffer) {
+  let value = 0
+  let shift = 0
+  const limit = Math.min(buffer.length, 5)
+  for (let index = 0; index < limit; index++) {
+    const byte = buffer[index]
+    value |= (byte & 0x7f) << shift
+    if ((byte & 0x80) === 0) return { value: value >>> 0, bytes: index + 1 }
+    shift += 7
+  }
+  if (buffer.length >= 5) return { invalid: true }
+  return null
+}
+
+function parsePlayKeepAliveFrame (frame, packetId) {
+  const prefix = readVarIntPrefix(frame)
+  if (!prefix || prefix.invalid) return null
+  const payloadLength = prefix.value
+  if (prefix.bytes + payloadLength !== frame.length) return null
+  const payload = frame.subarray(prefix.bytes)
+
+  if (payload.length === 10 && payload[0] === 0x00 && payload[1] === packetId) {
+    return { idBytes: Buffer.from(payload.subarray(2, 10)), compressedEnvelope: true }
+  }
+  return null
+}
+
+function encodePlayKeepAliveFrame ({ idBytes, packetId, compressedEnvelope }) {
+  const id = Buffer.from(idBytes)
+  if (id.length !== 8) throw new Error('Minecraft keepalive id must be 8 bytes')
+  const payload = compressedEnvelope
+    ? Buffer.concat([Buffer.from([0x00, packetId]), id])
+    : Buffer.concat([Buffer.from([packetId]), id])
+  if (payload.length >= 128) throw new Error('Unexpected keepalive frame length')
+  return Buffer.concat([Buffer.from([payload.length]), payload])
+}
+
 function bridgeHemConnection ({ ws, tcp, state, WebSocketOpen = 1 }) {
   const clientQueue = []
   let clientQueueBytes = 0
@@ -67,6 +114,8 @@ function bridgeHemConnection ({ ws, tcp, state, WebSocketOpen = 1 }) {
   let wsClosed = false
   let tcpClosed = false
   let terminated = false
+  let serverInspectBuffer = Buffer.alloc(0)
+  const fastAnsweredKeepAlives = new Map()
 
   const updateQueueState = () => {
     state.queuedClientFrames = clientQueue.length
@@ -95,6 +144,62 @@ function bridgeHemConnection ({ ws, tcp, state, WebSocketOpen = 1 }) {
     if (!state.closeReason) state.closeReason = reason
     closeWsOnce(code, reason)
     destroyTcpOnce()
+  }
+
+  const cleanupFastAnsweredKeepAlives = () => {
+    const now = Date.now()
+    for (const [key, expiresAt] of fastAnsweredKeepAlives) {
+      if (expiresAt <= now) fastAnsweredKeepAlives.delete(key)
+    }
+  }
+
+  const queueTcpWrite = buffer => {
+    clientQueue.push(Buffer.from(buffer))
+    clientQueueBytes += buffer.length
+    updateQueueState()
+    if (clientQueueBytes > MAX_CLIENT_QUEUE_BYTES) {
+      terminate('client-queue-overflow', 1013)
+      return false
+    }
+    return true
+  }
+
+  const inspectServerFrames = chunk => {
+    if (terminated) return
+    serverInspectBuffer = serverInspectBuffer.length
+      ? Buffer.concat([serverInspectBuffer, chunk])
+      : Buffer.from(chunk)
+
+    while (serverInspectBuffer.length) {
+      const prefix = readVarIntPrefix(serverInspectBuffer)
+      if (!prefix) return
+      if (prefix.invalid || prefix.value > MAX_INSPECT_FRAME_BYTES) {
+        recordError(state, 'minecraft-frame-inspection-reset')
+        serverInspectBuffer = Buffer.alloc(0)
+        return
+      }
+      const frameLength = prefix.bytes + prefix.value
+      if (serverInspectBuffer.length < frameLength) return
+      const frame = serverInspectBuffer.subarray(0, frameLength)
+      serverInspectBuffer = serverInspectBuffer.subarray(frameLength)
+
+      const keepAlive = parsePlayKeepAliveFrame(frame, PLAY_CLIENTBOUND_KEEP_ALIVE_ID)
+      if (!keepAlive) continue
+
+      state.keepAliveFastPathSeen++
+      state.keepAliveFastPathLastAt = Date.now()
+      cleanupFastAnsweredKeepAlives()
+      const key = keepAlive.idBytes.toString('hex')
+      fastAnsweredKeepAlives.set(key, Date.now() + KEEPALIVE_DEDUPE_MS)
+      const reply = encodePlayKeepAliveFrame({
+        idBytes: keepAlive.idBytes,
+        packetId: PLAY_SERVERBOUND_KEEP_ALIVE_ID,
+        compressedEnvelope: keepAlive.compressedEnvelope,
+      })
+      if (!queueTcpWrite(reply)) return
+      state.keepAliveFastPathResponses++
+      flushClientQueue()
+    }
   }
 
   const flushClientQueue = () => {
@@ -149,13 +254,18 @@ function bridgeHemConnection ({ ws, tcp, state, WebSocketOpen = 1 }) {
     const buffer = Buffer.isBuffer(data) ? Buffer.from(data) : Buffer.from(data)
     state.wsFramesReceived++
     state.wsBytesReceived += buffer.length
-    clientQueue.push(buffer)
-    clientQueueBytes += buffer.length
-    updateQueueState()
-    if (clientQueueBytes > MAX_CLIENT_QUEUE_BYTES) {
-      terminate('client-queue-overflow', 1013)
-      return
+
+    const browserKeepAlive = parsePlayKeepAliveFrame(buffer, PLAY_SERVERBOUND_KEEP_ALIVE_ID)
+    if (browserKeepAlive) {
+      cleanupFastAnsweredKeepAlives()
+      const key = browserKeepAlive.idBytes.toString('hex')
+      if (fastAnsweredKeepAlives.has(key)) {
+        state.keepAliveDuplicateDrops++
+        return
+      }
     }
+
+    if (!queueTcpWrite(buffer)) return
     flushClientQueue()
   })
 
@@ -166,6 +276,8 @@ function bridgeHemConnection ({ ws, tcp, state, WebSocketOpen = 1 }) {
       return
     }
     const buffer = Buffer.from(chunk)
+    inspectServerFrames(buffer)
+    if (terminated) return
     state.tcpBytesReceived += buffer.length
     const bufferedAmount = Number(ws.bufferedAmount || 0)
     state.maxWsBufferedAmount = Math.max(state.maxWsBufferedAmount, bufferedAmount)

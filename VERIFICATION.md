@@ -1,4 +1,4 @@
-# HEM RC41 verification record
+# HEM RC42 verification record
 
 Date: 2026-09-12
 
@@ -6,7 +6,7 @@ Date: 2026-09-12
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **167/167 passing** source/logic/security/release-gate tests in the current RC41 local pass.
+- `npm test`: **172/172 passing** source/logic/security/release-gate tests in the current RC42 local pass.
 - `npm run verify`: **58/58 release contracts passing**.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
@@ -248,7 +248,7 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - Build, doctor, deploy, and system certification now fail closed unless `hem-build.json` attests `transport: hem-raw-tcp-v1`, `netBrowserifyProductionTransport: false`, ordered delivery and a runtime-resolved HEM adapter installation.
 - System Acceptance requires one unchanged physical generation to survive at least three Paper keepalive cycles for at least 65 seconds and requires both browser-side raw-byte counters and gateway TCP-write counters to advance on that same connection before declaring the transport gate.
 - The historical RC37 `net-browserify` ordering patch remains source provenance only and is no longer executed by the RC39 production build.
-- Live longevity remains unclaimed until the exact RC39 artifact passes the pinned two-browser Paper workflow and required soak.
+- Live longevity remains unclaimed until the exact RC42 artifact passes the pinned two-browser Paper workflow and required soak.
 
 ## RC40 keepalive root-cause discrimination
 
@@ -265,3 +265,14 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - TDD regressions cover synchronous pre-named-event keepalive response/duplicate suppression, terminal WebSocket-error close, and the mandatory post-refresh keepalive certification phase.
 - RC40's direct Node control, generation-scoped diagnostics, event-loop lag counters and gateway byte evidence remain in place. Production Paper ports remain private; only the isolated acceptance stack exposes its ephemeral Paper port range on loopback for the control experiment.
 - Live timeout/outage recovery remains unclaimed until the exact RC41 artifact passes the pinned two-browser Paper workflow and required soak.
+
+
+## RC42 gateway keepalive fast-path
+
+- The exact RC41 Actions run proved the direct Node control and initial Hudson/Elise generations sustain Paper keepalives over `hem-raw-tcp-v1`, then isolated the remaining timeout to refreshed Hudson generation 2.
+- Refreshed Hudson reported a 20.079-second maximum browser event-loop stall with eight samples over one second. Its raw tunnel showed no errors or backpressure, received more than 1.2 MB of TCP data, and answered one parsed keepalive before Paper timed the connection out. A JavaScript keepalive guard cannot execute while Chromium's main thread is stalled.
+- RC42 moves the Paper 1.21.5 play keepalive deadline to the HEM gateway. With HEM's pinned `network-compression-threshold=256`, a play keepalive is an uncompressed packet inside the compression envelope; the gateway recognizes clientbound packet ID `0x26`, copies the opaque eight-byte `keepAliveId`, and immediately writes serverbound packet ID `0x1a` back to the same TCP connection.
+- The original server bytes continue to the browser unchanged. When Chromium later emits its normal response for the same challenge, the gateway drops that exact duplicate for 60 seconds so Paper receives exactly one response.
+- The frame inspector is stream-aware: it handles a keepalive split across TCP chunks, bounds inspected frame size, and does not reinterpret ordinary packet IDs as keepalives.
+- Secret-free diagnostics now count `keepAliveFastPathSeen`, `keepAliveFastPathResponses`, and `keepAliveDuplicateDrops`; System Acceptance requires these counters to advance on the exact physical generation, including at least two gateway responses after Hudson refresh.
+- Live success remains unclaimed until the exact RC42 artifact passes GitHub's pinned two-browser Paper workflow and the required soak.

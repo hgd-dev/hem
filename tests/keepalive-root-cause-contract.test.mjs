@@ -6,8 +6,8 @@ const system = fs.readFileSync('tests/system/browser-1215.mjs', 'utf8')
 const bridge = fs.readFileSync('apps/client/hem-bridge.js', 'utf8')
 const compose = fs.readFileSync('tests/system/docker-compose.yml', 'utf8')
 
-// RC41 retains RC40 root-cause discrimination and certifies the refreshed physical generation
-// starvation before applying any timeout mitigation.
+// RC42 retains RC40 root-cause discrimination and certifies the refreshed physical generation
+// with a gateway keepalive fast-path so renderer stalls cannot kill Paper liveness.
 test('system acceptance proves a direct node-minecraft-protocol control client on the same Paper server', () => {
   assert.match(system, /proveDirectProtocolKeepAlive/)
   assert.match(system, /direct-protocol-keepalive/)
@@ -37,6 +37,7 @@ test('refreshed Hudson generation must prove keepalive health before proxy outag
   assert.ok(refreshStart >= 0 && outageStart > refreshStart, 'refresh and outage phases must be present')
   const refreshPhase = system.slice(refreshStart, outageStart)
   assert.match(refreshPhase, /sustainGeneration\(hudson\.page,\s*'Hudson after refresh'/)
-  assert.match(refreshPhase, /minimumKeepAlives:\s*2/)
+  assert.match(refreshPhase, /minimumKeepAlives:\s*1/)
+  assert.match(refreshPhase, /minimumGatewayKeepAlives:\s*2/)
   assert.match(refreshPhase, /minimumMs:\s*35_000/)
 })

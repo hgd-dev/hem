@@ -89,7 +89,7 @@ function createHarness ({ token = '', resume = '', sharedStorage = null } = {}) 
       ok: true,
       json: async () => ({
         minecraft: '1.21.5',
-        hemVersion: '1.0.0-rc.41',
+        hemVersion: '1.0.0-rc.42',
         compatibilityMode: 'pinned-v0.1.99-lockfile-1215-verified',
         upstreamReleaseTag: 'v0.1.99',
         upstreamRelease1215: true,

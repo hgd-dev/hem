@@ -42,7 +42,7 @@ services:
       HEM_ENABLE_TEST_FAULTS: "true"
     ports:
       - "127.0.0.1:3000:3000"
-      # RC41 retains RC40's control client connecting directly to the same Paper TCP listener,
+      # RC42 retains RC40's control client connecting directly to the same Paper TCP listener,
       # bypassing Chromium and the HEM WebSocket gateway. This mapping is
       # acceptance-only and binds to loopback on the ephemeral CI host.
       - "127.0.0.1:31000-31009:31000-31009"

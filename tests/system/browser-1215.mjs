@@ -177,7 +177,7 @@ async function logSustainFailure(page, label, generationId, lastKnownConnectionI
   console.error(`${label} keepalive Paper tail\n` + paperTail.slice(-80).join('\n'))
 }
 
-async function sustainGeneration(page, label, { minimumKeepAlives = 3, minimumMs = 65_000 } = {}) {
+async function sustainGeneration(page, label, { minimumKeepAlives = 3, minimumGatewayKeepAlives = minimumKeepAlives, minimumMs = 65_000 } = {}) {
   const startSnapshot = await waitFor(() => page.evaluate(() => {
     const p = globalThis.__HEM_PARITY__
     const id = p?.connection?.activeGenerationId
@@ -238,6 +238,10 @@ async function sustainGeneration(page, label, { minimumKeepAlives = 3, minimumMs
     const gatewayAfter = await gatewayDiagnostics(lastKnownConnectionId)
     if (!gatewayAfter || gatewayAfter.tcpBytesWritten <= gatewayBefore.tcpBytesWritten || gatewayAfter.wsBytesReceived <= gatewayBefore.wsBytesReceived) {
       throw new Error(`${label}: gateway did not forward browser bytes to Paper during sustained keepalive gate: ${JSON.stringify({ before: gatewayBefore, after: gatewayAfter })}`)
+    }
+    const gatewayKeepAliveDelta = Number(gatewayAfter.keepAliveFastPathResponses || 0) - Number(gatewayBefore.keepAliveFastPathResponses || 0)
+    if (gatewayKeepAliveDelta < minimumGatewayKeepAlives) {
+      throw new Error(`${label}: HEM gateway did not fast-path enough Paper keepalives: ${JSON.stringify({ minimumGatewayKeepAlives, gatewayKeepAliveDelta, before: gatewayBefore, after: gatewayAfter })}`)
     }
     return start
   } catch (error) {
@@ -527,12 +531,12 @@ try {
   }
   await waitPlayers(SHARED, 2, 30_000)
   await rendererReady(hudson.page, 'Hudson after refresh')
-  const hudsonRefreshGeneration = await sustainGeneration(hudson.page, 'Hudson after refresh', { minimumKeepAlives: 2, minimumMs: 35_000 })
+  const hudsonRefreshGeneration = await sustainGeneration(hudson.page, 'Hudson after refresh', { minimumKeepAlives: 1, minimumGatewayKeepAlives: 2, minimumMs: 35_000 })
   const hudsonRefreshActiveGeneration = await activeGenerationId(hudson.page)
   if (hudsonRefreshGeneration !== hudsonRefreshActiveGeneration) {
     throw new Error(`Hudson refresh keepalive certification changed physical generation: expected ${hudsonRefreshGeneration}, got ${hudsonRefreshActiveGeneration}`)
   }
-  pass('session.refresh-resume', 'browser refresh creates a new resume-authenticated physical generation and proves same-generation Paper keepalives via retained short-lived reconnect lease')
+  pass('session.refresh-resume', 'browser refresh creates a new resume-authenticated physical generation and proves gateway-fast-pathed same-generation Paper keepalives via retained short-lived reconnect lease')
 
   // A page refresh is only one reconnect shape. Prove a transient proxy outage
   // actually drops both browser sessions, then recover the same tabs after the

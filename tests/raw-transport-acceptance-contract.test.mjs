@@ -29,3 +29,9 @@ test('live keepalive certification requires dedicated transport and gateway byte
 test('system proxy enables secret-free transport diagnostics only for acceptance', () => {
   assert.match(compose, /HEM_ENABLE_TEST_DIAGNOSTICS:\s*["']true["']/)
 })
+
+test('post-refresh certification requires gateway-side keepalive fast-path evidence', () => {
+  assert.match(system, /keepAliveFastPathResponses/)
+  assert.match(system, /minimumGatewayKeepAlives/)
+  assert.match(system, /Hudson after refresh[\s\S]*minimumGatewayKeepAlives:\s*2/)
+})

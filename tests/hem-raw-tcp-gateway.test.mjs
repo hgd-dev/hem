@@ -139,3 +139,91 @@ test('diagnostics count transport metadata without payload content', () => {
   assert.equal(Object.values(state).some(value => Buffer.isBuffer(value)), false)
   assert.equal(JSON.stringify(state).includes('payload'), false)
 })
+
+function playKeepAliveFrame ({ direction, idBytes, compressedEnvelope = true }) {
+  const packetId = direction === 'clientbound' ? 0x26 : 0x1a
+  const id = Buffer.from(idBytes)
+  assert.equal(id.length, 8)
+  const payload = compressedEnvelope
+    ? Buffer.concat([Buffer.from([0x00, packetId]), id])
+    : Buffer.concat([Buffer.from([packetId]), id])
+  assert.ok(payload.length < 128)
+  return Buffer.concat([Buffer.from([payload.length]), payload])
+}
+
+test('gateway fast-path replies to a Paper 1.21.5 play keepalive before the browser can run', () => {
+  const ws = new FakeWs()
+  const tcp = new FakeTcp()
+  const state = gateway.createDiagnosticState({ id: 'keepalive-fast', port: 31008 })
+  gateway.bridgeHemConnection({ ws, tcp, state, WebSocketOpen: FakeWs.OPEN })
+  tcp.connectNow()
+
+  const keepAliveId = Buffer.from('0102030405060708', 'hex')
+  const challenge = playKeepAliveFrame({ direction: 'clientbound', idBytes: keepAliveId })
+  const expectedReply = playKeepAliveFrame({ direction: 'serverbound', idBytes: keepAliveId })
+
+  tcp.emit('data', challenge)
+
+  assert.deepEqual(tcp.writes, [expectedReply])
+  assert.deepEqual(ws.sent, [challenge], 'challenge still reaches the browser unchanged')
+  assert.equal(state.keepAliveFastPathSeen, 1)
+  assert.equal(state.keepAliveFastPathResponses, 1)
+  assert.equal(state.keepAliveDuplicateDrops, 0)
+})
+
+test('gateway keepalive fast-path recognizes a challenge split across TCP chunks exactly once', () => {
+  const ws = new FakeWs()
+  const tcp = new FakeTcp()
+  const state = gateway.createDiagnosticState({ id: 'keepalive-split', port: 31008 })
+  gateway.bridgeHemConnection({ ws, tcp, state, WebSocketOpen: FakeWs.OPEN })
+  tcp.connectNow()
+
+  const keepAliveId = Buffer.from('1122334455667788', 'hex')
+  const challenge = playKeepAliveFrame({ direction: 'clientbound', idBytes: keepAliveId })
+  const expectedReply = playKeepAliveFrame({ direction: 'serverbound', idBytes: keepAliveId })
+
+  tcp.emit('data', challenge.subarray(0, 4))
+  assert.equal(tcp.writes.length, 0)
+  tcp.emit('data', challenge.subarray(4))
+
+  assert.deepEqual(tcp.writes, [expectedReply])
+  assert.equal(state.keepAliveFastPathResponses, 1)
+  assert.deepEqual(Buffer.concat(ws.sent), challenge, 'TCP bytes remain byte-for-byte visible to the browser')
+})
+
+test('browser keepalive duplicate is dropped after gateway already answered the same challenge', () => {
+  const ws = new FakeWs()
+  const tcp = new FakeTcp()
+  const state = gateway.createDiagnosticState({ id: 'keepalive-dedupe', port: 31008 })
+  gateway.bridgeHemConnection({ ws, tcp, state, WebSocketOpen: FakeWs.OPEN })
+  tcp.connectNow()
+
+  const keepAliveId = Buffer.from('7f6e5d4c3b2a1908', 'hex')
+  const challenge = playKeepAliveFrame({ direction: 'clientbound', idBytes: keepAliveId })
+  const browserReply = playKeepAliveFrame({ direction: 'serverbound', idBytes: keepAliveId })
+
+  tcp.emit('data', challenge)
+  assert.deepEqual(tcp.writes, [browserReply], 'gateway writes the first valid response')
+
+  ws.emit('message', browserReply, true)
+  assert.deepEqual(tcp.writes, [browserReply], 'late browser duplicate is not sent to Paper')
+  assert.equal(state.keepAliveDuplicateDrops, 1)
+})
+
+test('gateway does not mistake ordinary play packets for keepalives', () => {
+  const ws = new FakeWs()
+  const tcp = new FakeTcp()
+  const state = gateway.createDiagnosticState({ id: 'keepalive-negative', port: 31008 })
+  gateway.bridgeHemConnection({ ws, tcp, state, WebSocketOpen: FakeWs.OPEN })
+  tcp.connectNow()
+
+  const ordinaryServerFrame = Buffer.from([0x0a, 0x00, 0x27, 1, 2, 3, 4, 5, 6, 7, 8])
+  const ordinaryClientFrame = Buffer.from([0x0a, 0x00, 0x1b, 1, 2, 3, 4, 5, 6, 7, 8])
+  tcp.emit('data', ordinaryServerFrame)
+  ws.emit('message', ordinaryClientFrame, true)
+
+  assert.deepEqual(tcp.writes, [ordinaryClientFrame])
+  assert.deepEqual(ws.sent, [ordinaryServerFrame])
+  assert.equal(state.keepAliveFastPathResponses, 0)
+  assert.equal(state.keepAliveDuplicateDrops, 0)
+})
