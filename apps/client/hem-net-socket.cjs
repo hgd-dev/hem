@@ -328,7 +328,11 @@ Socket.prototype.connect = function (options, cb) {
     if (this.destroyed) return
     const error = new Error('HEM raw TCP websocket transport error')
     this._recordError(error)
-    this.emit('error', error)
+    if (!this.__hemTransportState.closeReason) this.__hemTransportState.closeReason = 'websocket-error'
+    // A transport error is terminal. Destroy the socket directly instead of first
+    // emitting an error event: downstream error listeners are allowed to throw, and
+    // that must never prevent the socket close -> minecraft-protocol end lifecycle.
+    this.destroy()
   })
 
   ws.addEventListener('close', event => {
@@ -337,7 +341,7 @@ Socket.prototype.connect = function (options, cb) {
     this.__hemTransportState.websocketCloses++
     const reason = String(event?.reason || '')
     const code = Number(event?.code || 0)
-    this.__hemTransportState.closeReason = reason || (code ? `websocket-close-${code}` : 'websocket-closed')
+    if (!this.__hemTransportState.closeReason) this.__hemTransportState.closeReason = reason || (code ? `websocket-close-${code}` : 'websocket-closed')
     this._connecting = false
     this.writable = false
     if (this.readable) {

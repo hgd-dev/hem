@@ -317,7 +317,7 @@ delete config.defaultProxy
 await fsp.writeFile(configPath, JSON.stringify(config, null, 2) + '\n')
 
 await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
-  hemVersion: '1.0.0-rc.40',
+  hemVersion: '1.0.0-rc.41',
   minecraft: '1.21.5',
   upstreamRepo: repo,
   upstreamRef: ref,
@@ -332,7 +332,7 @@ await fsp.writeFile(path.join(dist, 'hem-build.json'), JSON.stringify({
   pnpmVersion,
   frozenLockfile: true,
   serviceWorkerDisabled: true,
-  keepAliveGuard: 'hem-keepalive-guard-v1',
+  keepAliveGuard: 'hem-keepalive-guard-v2',
   transport: 'hem-raw-tcp-v1',
   netBrowserifyProductionTransport: false,
   orderedBinaryDelivery: true,

@@ -1,4 +1,4 @@
-# HEM RC40 verification record
+# HEM RC41 verification record
 
 Date: 2026-09-12
 
@@ -6,7 +6,7 @@ Date: 2026-09-12
 
 - Reconstructed real source tree after discovering the previous preserved RC contained documentation only.
 - `node --check` on generated Node/browser sources.
-- `npm test`: **164/164 passing** source/logic/security/release-gate tests in the current RC40 local pass.
+- `npm test`: **167/167 passing** source/logic/security/release-gate tests in the current RC41 local pass.
 - `npm run verify`: **58/58 release contracts passing**.
 - `npm run manifest:verify`: exact SHA-256 manifest verification for every shipped source file listed in `SOURCE_MANIFEST.sha256`; packaging refuses a stale manifest.
 - 1.21.5 server authority is a separate Paper process per HEM world. Paper is pinned to **1.21.5 build 114** with exact SHA-256 verification.
@@ -189,7 +189,7 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 - The exact RC34 GitHub Actions run shows both original browser sessions joining and rendering successfully, then Paper logs `lost connection: Timed out` for Elise and Hudson before the acceptance runner performs its deliberate refresh. The later `net::ERR_ABORTED` and destroyed Playwright execution context are therefore downstream symptoms, not a launcher/navigation root cause.
 - RC35 ships `apps/client/hem-keepalive-guard.cjs` into the browser before `hem-bridge.js`. It watches each clientbound `keep_alive`, allows the pinned `minecraft-protocol` responder to run first, and emits one fallback response only if no matching response write occurred in that turn. The fallback is idempotent per physical protocol client and cannot double-reply when upstream behaves normally.
 - Secret-free parity diagnostics now expose keepalive packets seen, response writes, fallback count and guard attachment. The required live gate `client.keepalive-transport` demands a real round trip for both Hudson and Elise before later acceptance can continue against a dead session.
-- `hem-build.json` attests `keepAliveGuard: hem-keepalive-guard-v1`, and live acceptance rejects an artifact missing that attestation.
+- `hem-build.json` attests `keepAliveGuard: hem-keepalive-guard-v2`, and live acceptance rejects an artifact missing that attestation.
 - The PlayerDB HTTP 400s remain classified as harmless profile lookup misses for HEM synthetic offline-mode usernames; they are not Paper/proxy readiness failures.
 - Long-session recovery remains unclaimed until this exact RC35 artifact passes the two-browser Paper 1.21.5 workflow and its required soak.
 
@@ -252,9 +252,16 @@ Do not promote this RC to `v1.0.0` until the exact-pinned `.github/workflows/sys
 
 ## RC40 keepalive root-cause discrimination
 
-- RC39's dedicated `hem-raw-tcp-v1` tunnel still reproduced Paper timeouts, so RC40 does not add another speculative transport rewrite.
-- System Acceptance now first runs a direct Node/Mineflayer client from the exact frozen upstream dependency graph against the same Paper 1.21.5 build 114 TCP listener for at least 75 seconds and four keepalive challenges. This bypasses Chromium and the HEM WebSocket gateway.
-- Browser physical-generation diagnostics now record 100 ms event-loop samples (`maxMs`, `samplesOver100ms`, `samplesOver1000ms`) so later keepalive misses can be correlated with Chromium scheduling stalls.
-- The keepalive failure path retains the last known `hem-raw-tcp-v1` connection ID and queries `/debug/connections` even after the browser document has navigated away, then prints the Paper tail.
-- The direct Paper port range is bound to `127.0.0.1` only in `tests/system/docker-compose.yml`; production Paper ports remain private and unpublished.
-- Live timeout resolution remains unclaimed until the exact RC40 Actions run tells us whether the direct protocol client survives while Chromium does not.
+- RC39's dedicated `hem-raw-tcp-v1` tunnel still reproduced Paper timeouts, so RC40 did not add another speculative transport rewrite.
+- System Acceptance first runs a direct Node/Mineflayer client from the exact frozen upstream dependency graph against the same Paper 1.21.5 build 114 TCP listener for at least 75 seconds and four keepalive challenges. This bypasses Chromium and the HEM WebSocket gateway.
+- Browser physical-generation diagnostics record 100 ms event-loop samples (`maxMs`, `samplesOver100ms`, `samplesOver1000ms`) and retain the last raw-tunnel connection ID for post-page-teardown gateway diagnostics.
+- The exact RC40 Actions run proved the direct control survived 5/5 Paper keepalives, Hudson g1 and Elise g1 passed sustained same-generation browser keepalives over `hem-raw-tcp-v1`, and Hudson successfully refreshed/resumed. It then exposed a reconnect-specific timeout: refreshed Hudson joined at 14:06:53 and Paper timed that generation out at 14:07:38, consistent with the first challenge plus Paper's timeout window. The same run also showed a deliberate proxy outage could emit a raw WebSocket error without making the physical-generation end flag observable.
+
+## RC41 reconnect keepalive + terminal transport-error repair
+
+- `hem-keepalive-guard-v2` answers a parsed clientbound `keep_alive` synchronously in the generic packet event, removing `setTimeout(0)` and renderer/timer scheduling from the critical response path. If the normal upstream named-event responder subsequently attempts the same reply, the wrapper suppresses that duplicate and adjusts the fallback accounting so one challenge still produces exactly one serverbound frame.
+- The raw HEM WebSocket adapter now treats a WebSocket `error` as terminal: it records `websocket-error` and destroys the raw socket immediately instead of depending on downstream protocol error listeners to return normally before lifecycle cleanup can run.
+- System Acceptance now certifies Hudson's refreshed physical generation independently: at least two same-generation keepalive round trips over at least 35 seconds are mandatory before the deliberate proxy outage begins. A reconnect generation that silently misses its first Paper challenge can no longer be mistaken for a successful refresh/resume gate.
+- TDD regressions cover synchronous pre-named-event keepalive response/duplicate suppression, terminal WebSocket-error close, and the mandatory post-refresh keepalive certification phase.
+- RC40's direct Node control, generation-scoped diagnostics, event-loop lag counters and gateway byte evidence remain in place. Production Paper ports remain private; only the isolated acceptance stack exposes its ephemeral Paper port range on loopback for the control experiment.
+- Live timeout/outage recovery remains unclaimed until the exact RC41 artifact passes the pinned two-browser Paper workflow and required soak.

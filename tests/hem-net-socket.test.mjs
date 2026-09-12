@@ -112,6 +112,23 @@ test('incoming ArrayBuffers are pushed synchronously in websocket order without 
   assert.equal(socket.__hemTransportState.bytesReceived, 4)
 })
 
+
+test('websocket transport error terminally closes the HEM socket instead of leaving it open', async () => {
+  const { socket, ws } = await openedSocket()
+  let closeCount = 0
+  socket.on('error', () => {})
+  socket.on('close', () => { closeCount++ })
+
+  ws.emit('error', {})
+  await tick()
+
+  assert.equal(socket.destroyed, true)
+  assert.equal(socket.readyState, 'closed')
+  assert.equal(closeCount, 1)
+  assert.match(socket.__hemTransportState.closeReason, /websocket-error|transport-error/i)
+  assert.ok(socket.__hemTransportState.errors.some(value => /websocket transport error/i.test(value)))
+})
+
 test('write after websocket close fails loudly', async () => {
   const { socket, ws } = await openedSocket()
   ws.close(1011, 'test close')

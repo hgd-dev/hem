@@ -31,6 +31,25 @@ class FakeClient extends EventEmitter {
   }
 }
 
+
+test('HEM keepalive guard replies synchronously before the named upstream event and suppresses the duplicate', async () => {
+  const { attachHemKeepAliveGuard } = require(guardPath)
+  const client = new FakeClient({ upstreamKeepAlive: true })
+  const state = attachHemKeepAliveGuard(client)
+  const packet = { keepAliveId: 789n }
+  const meta = { name: 'keep_alive' }
+
+  client.emit('packet', packet, meta)
+  assert.deepEqual(client.writes, [{ name: 'keep_alive', params: { keepAliveId: 789n } }], 'reply must be written in the generic packet turn, before timers')
+  assert.equal(state.seen, 1)
+  assert.equal(state.responses, 1)
+
+  client.emit('keep_alive', packet, meta)
+  await tick()
+  assert.deepEqual(client.writes, [{ name: 'keep_alive', params: { keepAliveId: 789n } }], 'normal upstream reply must be suppressed after HEM already answered')
+  assert.equal(state.fallbacks, 0)
+})
+
 test('HEM keepalive guard falls back exactly once when upstream sends no reply', async () => {
   const { attachHemKeepAliveGuard } = require(guardPath)
   const client = new FakeClient()
@@ -83,6 +102,6 @@ test('live acceptance requires both browser sessions to prove keepalive round tr
 test('built-client identity attests the HEM keepalive guard', () => {
   const build = fs.readFileSync(new URL('../apps/client/build-client.mjs', import.meta.url), 'utf8')
   const runner = fs.readFileSync(new URL('./system/browser-1215.mjs', import.meta.url), 'utf8')
-  assert.match(build, /keepAliveGuard:\s*'hem-keepalive-guard-v1'/)
-  assert.match(runner, /liveBuildIdentity\.keepAliveGuard\s*!==\s*'hem-keepalive-guard-v1'/)
+  assert.match(build, /keepAliveGuard:\s*'hem-keepalive-guard-v2'/)
+  assert.match(runner, /liveBuildIdentity\.keepAliveGuard\s*!==\s*'hem-keepalive-guard-v2'/)
 })

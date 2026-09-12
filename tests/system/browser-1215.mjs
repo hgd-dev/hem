@@ -437,7 +437,7 @@ try {
   if (!/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamPackageSha256 || '') || !/^[0-9a-f]{64}$/i.test(liveBuildIdentity.upstreamLockSha256 || '')) throw new Error('Built browser client is missing frozen v0.1.99 package/lock provenance')
   if (liveBuildIdentity.frozenLockfile !== true) throw new Error('Built browser client did not use the pinned v0.1.99 frozen lockfile')
   if (liveBuildIdentity.serviceWorkerDisabled !== true) throw new Error('HEM browser build must disable the upstream service worker for deterministic refresh/reconnect')
-  if (liveBuildIdentity.keepAliveGuard !== 'hem-keepalive-guard-v1') throw new Error('HEM browser build is missing the guarded Paper keepalive fallback')
+  if (liveBuildIdentity.keepAliveGuard !== 'hem-keepalive-guard-v2') throw new Error('HEM browser build is missing the guarded Paper keepalive fallback')
   if (liveBuildIdentity.transport !== 'hem-raw-tcp-v1' || liveBuildIdentity.netBrowserifyProductionTransport !== false || liveBuildIdentity.orderedBinaryDelivery !== true || liveBuildIdentity.singleWebSocketTcpTunnel !== true || liveBuildIdentity.hemNetTransport?.runtimeResolved !== true) throw new Error('HEM browser build is missing the dedicated raw TCP transport attestation')
   if (liveBuildIdentity.compatibilityMode !== 'pinned-v0.1.99-lockfile-1215-verified' || liveBuildIdentity.protocolVerified1215 !== true) throw new Error(`HEM 1.21.5 requires pinned v0.1.99 frozen dependencies plus verified protocol/data; got ${liveBuildIdentity.compatibilityMode}`)
   const soundMapBytes = await fs.readFile('apps/client/dist/sounds.js')
@@ -527,7 +527,12 @@ try {
   }
   await waitPlayers(SHARED, 2, 30_000)
   await rendererReady(hudson.page, 'Hudson after refresh')
-  pass('session.refresh-resume', 'browser refresh creates a new resume-authenticated physical generation via retained short-lived reconnect lease')
+  const hudsonRefreshGeneration = await sustainGeneration(hudson.page, 'Hudson after refresh', { minimumKeepAlives: 2, minimumMs: 35_000 })
+  const hudsonRefreshActiveGeneration = await activeGenerationId(hudson.page)
+  if (hudsonRefreshGeneration !== hudsonRefreshActiveGeneration) {
+    throw new Error(`Hudson refresh keepalive certification changed physical generation: expected ${hudsonRefreshGeneration}, got ${hudsonRefreshActiveGeneration}`)
+  }
+  pass('session.refresh-resume', 'browser refresh creates a new resume-authenticated physical generation and proves same-generation Paper keepalives via retained short-lived reconnect lease')
 
   // A page refresh is only one reconnect shape. Prove a transient proxy outage
   // actually drops both browser sessions, then recover the same tabs after the

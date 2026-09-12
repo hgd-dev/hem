@@ -1,7 +1,7 @@
 {
   "name": "@hem/proxy",
   "private": true,
-  "version": "1.0.0-rc.40",
+  "version": "1.0.0-rc.41",
   "type": "commonjs",
   "dependencies": {
     "express": "^4.21.2",

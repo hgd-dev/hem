@@ -22,11 +22,20 @@
         const key = idKey(params.keepAliveId)
         for (let i = pending.length - 1; i >= 0; i--) {
           const ticket = pending[i]
-          if (!ticket.responded && ticket.key === key) {
-            ticket.responded = true
-            state.responses++
-            break
+          if (ticket.key !== key) continue
+          if (ticket.responded) {
+            // HEM answers in the generic packet event before node-minecraft-protocol
+            // emits its named keep_alive event. Suppress that later native duplicate.
+            if (ticket.countedFallback) {
+              ticket.countedFallback = false
+              state.fallbacks--
+            }
+            ticket.nativeDuplicateSuppressed = true
+            return
           }
+          ticket.responded = true
+          state.responses++
+          break
         }
       }
       return originalWrite.apply(this, arguments)
@@ -35,17 +44,27 @@
     client.on('packet', (data, meta) => {
       if (meta?.name !== 'keep_alive' || !data || !Object.prototype.hasOwnProperty.call(data, 'keepAliveId')) return
       state.seen++
-      const ticket = { key: idKey(data.keepAliveId), responded: false }
+      const ticket = { key: idKey(data.keepAliveId), responded: true, countedFallback: true, nativeDuplicateSuppressed: false }
       pending.push(ticket)
 
-      // node-minecraft-protocol emits the generic `packet` event immediately before
-      // the packet-specific `keep_alive` event. Give its normal responder the rest of
-      // this turn first. Only send HEM's fallback if no matching write occurred.
+      // Reply in the same JavaScript turn in which the challenge is parsed. Renderer
+      // work and timer scheduling therefore cannot delay the critical Paper response.
+      state.responses++
+      state.fallbacks++
+      try {
+        originalWrite.call(client, 'keep_alive', { keepAliveId: data.keepAliveId })
+      } catch (error) {
+        ticket.responded = false
+        ticket.countedFallback = false
+        state.responses--
+        state.fallbacks--
+        throw error
+      }
+
+      // node-minecraft-protocol emits its named keep_alive event synchronously after
+      // the generic packet event. Keep the ticket through the rest of this turn so
+      // the wrapped write can suppress that duplicate, then forget the challenge.
       setTimeout(() => {
-        if (!ticket.responded && client.ended !== true && client.serializer?.writable !== false) {
-          state.fallbacks++
-          client.write('keep_alive', { keepAliveId: data.keepAliveId })
-        }
         const index = pending.indexOf(ticket)
         if (index !== -1) pending.splice(index, 1)
       }, 0)
