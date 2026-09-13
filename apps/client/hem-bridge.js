@@ -16,7 +16,7 @@
   // Expose a tiny read-only diagnostics surface for HEM's automated acceptance
   // runner. It deliberately contains no launch/resume secrets or profile credentials.
   const parity = {
-    hemVersion: '1.0.0-rc.42',
+    hemVersion: '1.0.0-rc.43',
     target: '1.21.5',
     connected: false,
     build: { checked: false, ok: false, compatibilityMode: '', upstreamRelease1215: null, protocolVerified1215: null, upstreamCommit: '' },
@@ -380,6 +380,11 @@
         errors: Array.isArray(raw.errors) ? raw.errors.slice(-8).map(value => String(value).slice(0, 240)) : [],
       }
       mirrorTransport(generation)
+      // A hem-raw-tcp-v1 WebSocket is the physical connection boundary. If that
+      // tunnel has a terminal close reason, this generation is over even when
+      // the higher-level minecraft-protocol client misses or delays its `end`
+      // event during a gateway outage.
+      if (generation.rawTransport.closeReason) endGeneration(generation)
     }
     syncRawTransport()
     Object.defineProperty(generation, '__rawTransportTimer', { value: setInterval(syncRawTransport, 250), writable: true, configurable: true, enumerable: false })

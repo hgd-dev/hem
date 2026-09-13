@@ -89,7 +89,7 @@ function createHarness ({ token = '', resume = '', sharedStorage = null } = {}) 
       ok: true,
       json: async () => ({
         minecraft: '1.21.5',
-        hemVersion: '1.0.0-rc.42',
+        hemVersion: '1.0.0-rc.43',
         compatibilityMode: 'pinned-v0.1.99-lockfile-1215-verified',
         upstreamReleaseTag: 'v0.1.99',
         upstreamRelease1215: true,
@@ -255,4 +255,43 @@ test('same-tab reload keeps physical generation IDs monotonic and resumes with t
   second.tick()
   assert.equal(second.context.__HEM_PARITY__.connection.activeGenerationId, 2)
   assert.deepEqual(chats, [`/hem resume ${resumeToken}`])
+})
+
+test('bridge ends a physical generation when its raw TCP tunnel closes even if the protocol client misses end', () => {
+  const harness = createHarness({ token: 'launch-token-0123456789abcdef0123456789abcdef' })
+  const client = createClient()
+  client.socket = {
+    destroyed: false,
+    readyState: 'open',
+    __hemTransportState: {
+      implementation: 'hem-raw-tcp-v1',
+      connectionId: 'physical-outage-connection',
+      framesSent: 12,
+      framesReceived: 34,
+      bytesSent: 120,
+      bytesReceived: 340,
+      maxBufferedAmount: 0,
+      queuedWrites: 0,
+      queuedBytes: 0,
+      closeReason: '',
+      errors: [],
+    },
+  }
+  const bot = createBot(client)
+  harness.context.bot = bot
+  harness.tick()
+
+  const generation = harness.context.__HEM_PARITY__.connection.generations[0]
+  assert.equal(generation.connected, true)
+  assert.equal(generation.endedAt, 0)
+  assert.equal(generation.rawTransport.connectionId, 'physical-outage-connection')
+
+  client.socket.destroyed = true
+  client.socket.readyState = 'closed'
+  client.socket.__hemTransportState.closeReason = 'websocket-close-1006'
+  harness.tick()
+
+  assert.equal(generation.connected, false)
+  assert.ok(generation.endedAt > 0)
+  assert.equal(generation.rawTransport.closeReason, 'websocket-close-1006')
 })
